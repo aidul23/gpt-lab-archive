@@ -18,6 +18,9 @@ build/
 !.env.example
 *.pem
 
+# Local backups (DB + uploads)
+backups/
+
 # App data (local DB & uploaded photos)
 database/*.db
 database/*.db-*

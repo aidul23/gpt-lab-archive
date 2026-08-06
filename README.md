@@ -116,6 +116,26 @@ There is **no default admin password**. Admin login fails until `ADMIN_PASSWORD`
 
 Admin login URL: [http://127.0.0.1:5001/admin/login](http://127.0.0.1:5001/admin/login)
 
+Keep `FLASK_DEBUG=0` on any shared host (never run the beta with debug enabled).
+
+### Production-style run (VM / shared host)
+
+Use gunicorn instead of the Flask development server:
+
+```bash
+source venv/bin/activate
+pip install -r requirements.txt
+gunicorn -b 0.0.0.0:5001 -w 2 app:app
+```
+
+### Backup database and uploads
+
+```bash
+./scripts/backup_data.sh
+```
+
+This writes a timestamped copy under `backups/` (gitignored). Restore by copying `lab_publications.db` back to `database/` and member photos back to `static/uploads/members/`.
+
 ## Main Routes
 
 | Route | Description |
