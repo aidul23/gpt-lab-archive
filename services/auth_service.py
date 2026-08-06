@@ -32,7 +32,11 @@ def verify_password(password):
     if config.ADMIN_PASSWORD_HASH:
         return check_password_hash(config.ADMIN_PASSWORD_HASH, password)
 
-    return hmac.compare_digest(password, config.ADMIN_PASSWORD)
+    expected = config.ADMIN_PASSWORD
+    if not expected:
+        return False
+
+    return hmac.compare_digest(password, expected)
 
 
 def admin_required(view):

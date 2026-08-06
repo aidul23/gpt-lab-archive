@@ -86,18 +86,21 @@ The app defaults to port **5001** because macOS often uses port 5000 for AirPlay
 FLASK_PORT=8080 python app.py
 ```
 
-### 5. Log in to admin
+### 5. Configure secrets and log in to admin
 
-Admin routes are password protected. Default development password:
-
-```text
-admin
-```
-
-Override it with an environment variable before starting the app:
+Copy the example env file and set a strong password (a local `.env` is gitignored):
 
 ```bash
+cp .env.example .env
+# Edit .env: SECRET_KEY, ADMIN_PASSWORD, FLASK_DEBUG=0
+```
+
+Or export variables in the shell:
+
+```bash
+export SECRET_KEY="long-random-string"
 export ADMIN_PASSWORD="your-secure-password"
+export FLASK_DEBUG=0
 python app.py
 ```
 
@@ -108,6 +111,8 @@ python -c "from werkzeug.security import generate_password_hash; print(generate_
 export ADMIN_PASSWORD_HASH="paste-hash-here"
 python app.py
 ```
+
+There is **no default admin password**. Admin login fails until `ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH` is set.
 
 Admin login URL: [http://127.0.0.1:5001/admin/login](http://127.0.0.1:5001/admin/login)
 

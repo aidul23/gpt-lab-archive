@@ -1,20 +1,38 @@
 """Application configuration."""
 import os
+from pathlib import Path
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Load local secrets from .env when present (never commit .env).
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(BASE_DIR) / ".env")
+except ImportError:
+    pass
 
 # SQLite database file path
 DATABASE_PATH = os.path.join(BASE_DIR, "database", "lab_publications.db")
 
 # Flask settings
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
-DEBUG = os.environ.get("FLASK_DEBUG", "1") == "1"
+# Prefer SECRET_KEY from the environment / .env. A random fallback is only for
+# throwaway local runs and will invalidate sessions on every restart.
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    import secrets
+
+    SECRET_KEY = secrets.token_urlsafe(48)
+
+# Debug off by default for shared hosts; set FLASK_DEBUG=1 for local development.
+DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 # Default to 5001 because macOS often reserves port 5000 for AirPlay Receiver.
 PORT = int(os.environ.get("FLASK_PORT", "5001"))
 
 # Admin authentication
-# Set ADMIN_PASSWORD in production. Optionally set ADMIN_PASSWORD_HASH instead.
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
+# Set ADMIN_PASSWORD (or ADMIN_PASSWORD_HASH) in .env / the environment.
+# There is no weak default password — login fails until one is configured.
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 ADMIN_PASSWORD_HASH = os.environ.get("ADMIN_PASSWORD_HASH")
 
 # External API settings
