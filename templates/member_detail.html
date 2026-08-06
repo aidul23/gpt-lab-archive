@@ -31,6 +31,7 @@
             {% if member.profile_url %}
                 <a href="{{ member.profile_url }}" target="_blank" rel="noopener">External profile</a>
             {% endif %}
+            <a href="{{ url_for('publication_request_new', member=member.id) }}">Request missing paper</a>
         </div>
     </div>
 </section>
@@ -97,6 +98,7 @@
     <div class="page-header member-publications-header">
         <h2>Published Papers</h2>
         <div class="action-row">
+            <a href="{{ url_for('publication_request_new', member=member.id) }}" class="btn btn-primary btn-small">Request missing paper</a>
             <a href="{{ url_for('publications', member=member.id, preprint_status='published') }}" class="btn btn-secondary btn-small">View published only</a>
             <a href="{{ url_for('export_member_publications_csv', member_id=member.id) }}" class="btn btn-secondary btn-small">Export CSV</a>
             <a href="{{ url_for('export_member_publications_bib', member_id=member.id) }}" class="btn btn-secondary btn-small">Export BibTeX</a>

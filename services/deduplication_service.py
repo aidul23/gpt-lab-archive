@@ -27,12 +27,27 @@ def is_same_publication(existing, candidate):
 
     Priority:
     1. Matching DOI
-    2. Matching source + source_id
-    3. Matching normalized title
+    2. Matching arXiv ID
+    3. Matching source + source_id
+    4. Matching normalized title + year (fallback: title only)
     """
     existing_doi = (existing.doi or "").strip().lower()
     candidate_doi = (candidate.get("doi") or "").strip().lower()
     if existing_doi and candidate_doi and existing_doi == candidate_doi:
+        return True
+
+    from services.identity_verification import normalize_arxiv_id
+
+    existing_arxiv = normalize_arxiv_id(
+        getattr(existing, "arxiv_id", None) or existing.source_id
+        if (existing.source or "").lower() == "arxiv"
+        else getattr(existing, "arxiv_id", None)
+    )
+    candidate_arxiv = normalize_arxiv_id(
+        candidate.get("arxiv_id")
+        or (candidate.get("source_id") if (candidate.get("source") or "").lower() == "arxiv" else None)
+    )
+    if existing_arxiv and candidate_arxiv and existing_arxiv == candidate_arxiv:
         return True
 
     existing_source = (existing.source or "").strip().lower()
@@ -52,6 +67,10 @@ def is_same_publication(existing, candidate):
     existing_title = normalize_title(existing.title)
     candidate_title = normalize_title(candidate.get("title"))
     if existing_title and candidate_title and existing_title == candidate_title:
+        existing_year = existing.year
+        candidate_year = candidate.get("year")
+        if existing_year and candidate_year:
+            return int(existing_year) == int(candidate_year)
         return True
 
     return False

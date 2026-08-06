@@ -1,14 +1,14 @@
-"""External publication sync service."""
-import re
-
+"""External publication sync service (ORCID-anchored tiered pipeline)."""
 import requests
 
-from services import arxiv_client, crossref_client, openalex_client, orcid_client, sync_log_service
-from services import member_service, publication_service
+from services import arxiv_client, crossref_client, sync_log_service
+from services import match_candidate_service, member_service, publication_service
+from services.pipeline import runner as pipeline_runner
+from services.pipeline.records import to_import_candidate
 
 
 def sync_from_orcid(member_id):
-    """Fetch works from ORCID and import them for a lab member."""
+    """Fetch Tier 1 ORCID works and import them for a lab member."""
     log = sync_log_service.start_log("orcid")
     member = member_service.get_member_by_id(member_id)
     if not member:
@@ -21,7 +21,7 @@ def sync_from_orcid(member_id):
         )
 
     try:
-        result = _sync_orcid_for_member(member)
+        result = _run_pipeline_for_member(member, stages=("orcid",))
         return _finish(log, result["status"], result["message"], result)
     except requests.RequestException as exc:
         return _finish(log, "error", f"ORCID API request failed: {exc}")
@@ -30,20 +30,21 @@ def sync_from_orcid(member_id):
 
 
 def sync_from_openalex(member_id):
-    """Fetch works from OpenAlex and import them for a lab member."""
+    """Fetch Tier 2 OpenAlex works by ORCID (not Author ID) and import them."""
     log = sync_log_service.start_log("openalex")
     member = member_service.get_member_by_id(member_id)
     if not member:
         return _finish(log, "error", f"Member {member_id} not found.")
-    if not member.openalex_author_id:
+    if not member.orcid:
         return _finish(
             log,
             "error",
-            f"Member '{member.name}' does not have an OpenAlex author ID configured.",
+            f"Member '{member.name}' needs an ORCID for OpenAlex sync "
+            "(Author ID is not used as the sync anchor).",
         )
 
     try:
-        result = _sync_openalex_for_member(member)
+        result = _run_pipeline_for_member(member, stages=("openalex",))
         return _finish(log, result["status"], result["message"], result)
     except requests.RequestException as exc:
         return _finish(log, "error", f"OpenAlex API request failed: {exc}")
@@ -77,11 +78,15 @@ def sync_from_crossref(doi):
 
 
 def sync_from_arxiv(query, member_id=None):
-    """Search arXiv and import matching preprints."""
+    """
+    Enrich/import from arXiv by ID or explicit fielded query.
+
+    Author-name search is not used for member auto-sync. Prefer id:NNNN.NNNNN.
+    """
     log = sync_log_service.start_log("arxiv")
     query = (query or "").strip()
     if not query:
-        return _finish(log, "error", "Search query is required.")
+        return _finish(log, "error", "Search query is required (prefer id:NNNN.NNNNN).")
 
     member = member_service.get_member_by_id(member_id) if member_id else None
 
@@ -95,69 +100,31 @@ def sync_from_arxiv(query, member_id=None):
 
 
 def sync_from_arxiv_for_member(member_id, max_results=50):
-    """Search arXiv for a member's preprints and import matches."""
+    """
+    Member arXiv path no longer searches by author name.
+
+    Preprints arrive via ORCID/OpenAlex ORCID queries; arXiv is ID enrichment only.
+    """
     member = member_service.get_member_by_id(member_id)
     if not member:
         return _skipped_result("arxiv", f"Member {member_id} not found.")
-
-    queries = _arxiv_author_queries(member.name)
-    if not queries:
-        return _skipped_result("arxiv", f"Could not build arXiv query for {member.name}.")
-
-    log = sync_log_service.start_log("arxiv")
-    try:
-        result = _sync_arxiv_queries_for_member(queries, member, max_results=max_results)
-        return _finish(log, result["status"], result["message"], result)
-    except requests.RequestException as exc:
-        return _finish(log, "error", f"arXiv API request failed: {exc}")
-    except Exception as exc:
-        return _finish(log, "error", f"arXiv sync failed: {exc}")
-
-
-def _sync_arxiv_queries_for_member(queries, member, max_results=50):
-    """Run one or more arXiv author queries and import unique matches."""
-    seen_ids = set()
-    candidates = []
-
-    for query in queries:
-        batch = arxiv_client.fetch_works(query, max_results=max_results)
-        batch = _filter_arxiv_for_member(batch, member)
-        for candidate in batch:
-            source_id = candidate.get("source_id") or candidate.get("title")
-            if source_id in seen_ids:
-                continue
-            seen_ids.add(source_id)
-            candidates.append(candidate)
-        if candidates:
-            break
-
-    # Broader last-name search if precise queries found nothing.
-    if not candidates:
-        last_name = _member_last_name(member.name)
-        broad_query = f"au:{last_name}" if last_name else None
-        if broad_query and broad_query not in queries:
-            batch = arxiv_client.fetch_works(broad_query, max_results=max_results)
-            batch = _filter_arxiv_for_member(batch, member)
-            for candidate in batch:
-                source_id = candidate.get("source_id") or candidate.get("title")
-                if source_id in seen_ids:
-                    continue
-                seen_ids.add(source_id)
-                candidates.append(candidate)
-
-    summary = _import_candidates(candidates, member)
-    message = (
-        f"arXiv sync for {member.name}: fetched {len(candidates)} matching preprint(s); "
-        f"created {summary['created']}, updated {summary['updated']}, "
-        f"skipped {summary['skipped']}."
+    return _skipped_result(
+        "arxiv",
+        (
+            f"arXiv name search disabled for {member.name}. "
+            "Preprints are imported via ORCID/OpenAlex ORCID filters; "
+            "use Sync Tools with an arXiv id: query for ID enrichment only."
+        ),
     )
-    return {"status": "success", "message": message, **summary}
+
 
 def sync_member_publications(member_id):
     """
-    Sync one member from ORCID, OpenAlex, arXiv, and enrich DOIs via Crossref.
+    ORCID-anchored sync for one member.
 
-    Returns a structured summary without writing a top-level sync log.
+    Tier 1 (ORCID) + Tier 2 (OpenAlex-by-ORCID) auto-import.
+    Tier 3 name-only candidates are scored into the review queue only.
+    Blocklist always wins. Then Crossref enrichment runs for DOI metadata.
     """
     member = member_service.get_member_by_id(member_id)
     if not member:
@@ -174,26 +141,49 @@ def sync_member_publications(member_id):
 
     sources = {}
 
-    if member.orcid:
-        sources["orcid"] = sync_from_orcid(member_id)
-    else:
-        sources["orcid"] = _skipped_result("orcid", "No ORCID configured.")
+    if not member.orcid:
+        sources["pipeline"] = _skipped_result(
+            "pipeline",
+            "No ORCID configured — ORCID is required for identity-safe sync.",
+        )
+        sources["crossref"] = _skipped_result("crossref", "Skipped without ORCID sync.")
+        totals = _aggregate_source_results(sources.values())
+        return {
+            "member_id": member.id,
+            "member_name": member.name,
+            "status": "skipped",
+            "message": format_member_sync_message(member.name, totals, sources),
+            "sources": sources,
+            **totals,
+        }
 
-    if member.openalex_author_id:
-        sources["openalex"] = sync_from_openalex(member_id)
-    else:
-        sources["openalex"] = _skipped_result("openalex", "No OpenAlex author ID configured.")
+    try:
+        pipeline_result = _run_pipeline_for_member(member)
+        sources["pipeline"] = pipeline_result
+    except requests.RequestException as exc:
+        sources["pipeline"] = {
+            "status": "error",
+            "source": "pipeline",
+            "message": f"Pipeline API request failed: {exc}",
+            "created": 0,
+            "updated": 0,
+            "skipped": 0,
+        }
+    except Exception as exc:
+        sources["pipeline"] = {
+            "status": "error",
+            "source": "pipeline",
+            "message": f"Pipeline sync failed: {exc}",
+            "created": 0,
+            "updated": 0,
+            "skipped": 0,
+        }
 
-    sources["arxiv"] = sync_from_arxiv_for_member(member_id)
     sources["crossref"] = _enrich_member_publications_from_crossref(member)
 
     totals = _aggregate_source_results(sources.values())
     status = _overall_status(sources.values())
-    message = format_member_sync_message(
-        member.name,
-        totals,
-        sources,
-    )
+    message = format_member_sync_message(member.name, totals, sources)
 
     return {
         "member_id": member.id,
@@ -216,24 +206,32 @@ def format_member_sync_message(member_name, totals, sources=None):
 
     source_notes = []
     for key, label in (
+        ("pipeline", "ORCID/OpenAlex pipeline"),
         ("orcid", "ORCID"),
         ("openalex", "OpenAlex"),
-        ("arxiv", "arXiv preprints"),
+        ("arxiv", "arXiv"),
         ("crossref", "Crossref"),
     ):
         result = sources.get(key) or {}
+        if not result:
+            continue
         status = result.get("status")
         if status == "skipped":
             source_notes.append(f"{label} skipped ({result.get('message', 'not configured')})")
         elif status == "success":
+            extra = []
+            if result.get("review_queued"):
+                extra.append(f"{result['review_queued']} queued for review")
+            if result.get("blocked"):
+                extra.append(f"{result['blocked']} blocked")
+            suffix = f" ({'; '.join(extra)})" if extra else ""
             source_notes.append(
                 f"{label}: +{result.get('created', 0)} new, "
-                f"{result.get('updated', 0)} updated"
+                f"{result.get('updated', 0)} updated{suffix}"
             )
         elif status == "error":
             detail = (result.get("message") or "").strip()
             if detail:
-                # Keep the flash message readable.
                 short = detail if len(detail) <= 120 else detail[:117] + "..."
                 source_notes.append(f"{label} failed ({short})")
             else:
@@ -245,11 +243,7 @@ def format_member_sync_message(member_name, totals, sources=None):
 
 
 def sync_all_members(active_only=True):
-    """
-    Sync publications and preprints for all registered lab members.
-
-    Uses ORCID, OpenAlex, arXiv, and Crossref enrichment where available.
-    """
+    """Sync publications for all registered lab members via the ORCID pipeline."""
     log = sync_log_service.start_log("sync_all")
     members = member_service.get_all_members(
         include_inactive=not active_only,
@@ -297,33 +291,62 @@ def sync_all_members(active_only=True):
     return _finish(log, status, message, combined)
 
 
-def _sync_orcid_for_member(member):
-    candidates = orcid_client.fetch_works(member.orcid)
-    summary = _import_candidates(candidates, member)
-    message = (
-        f"ORCID sync for {member.name}: fetched {len(candidates)} works; "
-        f"created {summary['created']}, updated {summary['updated']}, "
-        f"skipped {summary['skipped']}."
-    )
-    return {"status": "success", "message": message, **summary}
+def _run_pipeline_for_member(member, stages=None):
+    """
+    Run the tiered matcher and write accepted papers + review queue.
 
+    stages is reserved for future partial runs; currently always full ORCID+OpenAlex.
+    """
+    lab_names = [item.name for item in member_service.get_all_members()]
+    result = pipeline_runner.run_for_member(member, lab_member_names=lab_names)
 
-def _sync_openalex_for_member(member):
-    candidates = openalex_client.fetch_works(member.openalex_author_id)
-    summary = _import_candidates(candidates, member)
-    message = (
-        f"OpenAlex sync for {member.name}: fetched {len(candidates)} works; "
-        f"created {summary['created']}, updated {summary['updated']}, "
-        f"skipped {summary['skipped']}."
+    import_candidates = [
+        to_import_candidate(record) for record in result.get("accepted") or []
+    ]
+    summary = _import_candidates(import_candidates, member)
+
+    review_stats = match_candidate_service.upsert_review_candidates(
+        member.id, result.get("needs_review") or []
     )
-    return {"status": "success", "message": message, **summary}
+
+    blocked = sum(
+        1 for item in result.get("decisions_log") or [] if item.get("reason") == "manual_blocklist"
+    )
+    accepted_count = len(result.get("accepted") or [])
+    review_count = len(result.get("needs_review") or [])
+
+    # Optionally refresh observed OpenAlex author ID for coverage display only.
+    observed = result.get("observed_openalex_author_ids") or []
+    if observed and not member.openalex_author_id:
+        member.openalex_author_id = observed[0]
+        from database.db import db
+
+        db.session.commit()
+
+    message = (
+        f"Pipeline for {member.name}: {accepted_count} accepted (Tier 1/2/allowlist), "
+        f"{review_count} queued for Tier 3 review, {blocked} blocked; "
+        f"created {summary['created']}, updated {summary['updated']}, "
+        f"skipped {summary['skipped']}; review upsert "
+        f"+{review_stats['created']}/~{review_stats['updated']}."
+    )
+    return {
+        "status": "success",
+        "source": "pipeline",
+        "message": message,
+        "review_queued": review_count,
+        "blocked": blocked,
+        "decisions_log": result.get("decisions_log") or [],
+        "observed_openalex_author_ids": observed,
+        **summary,
+    }
 
 
 def _sync_arxiv_query(query, member=None, max_results=25, filter_for_member=False):
+    """Manual arXiv import — prefer ID queries; name search is not identity-safe."""
     candidates = arxiv_client.fetch_works(query, max_results=max_results)
-    if filter_for_member and member:
-        candidates = _filter_arxiv_for_member(candidates, member)
-
+    # Do not auto-trust name hits for members; only import when an explicit query
+    # was provided by an admin (ID enrichment or deliberate search).
     summary = _import_candidates(candidates, member)
     label = member.name if member else query
     message = (
@@ -331,8 +354,9 @@ def _sync_arxiv_query(query, member=None, max_results=25, filter_for_member=Fals
         f"created {summary['created']}, updated {summary['updated']}, "
         f"skipped {summary['skipped']}."
     )
-    status = "success" if candidates or summary["skipped"] else "success"
-    return {"status": status, "message": message, **summary}
+    if query.lower().startswith("au:"):
+        message += " Warning: author-name arXiv queries are not identity-safe."
+    return {"status": "success", "message": message, **summary}
 
 
 def _enrich_member_publications_from_crossref(member):
@@ -369,98 +393,6 @@ def _enrich_member_publications_from_crossref(member):
         f"skipped {summary['skipped']}."
     )
     return {"status": "success", "message": message, **summary}
-
-
-def _filter_arxiv_for_member(candidates, member):
-    """Keep arXiv preprints where the member is a listed author."""
-    from services.author_matching import names_refer_to_same_person
-
-    filtered = []
-    for candidate in candidates:
-        for author in candidate.get("authors") or []:
-            if names_refer_to_same_person(author.get("author_name"), member.name):
-                filtered.append(candidate)
-                break
-    return filtered
-
-
-def _author_matches_member(author_name, member):
-    """Return True when an author string likely refers to the member."""
-    from services.author_matching import names_refer_to_same_person
-
-    return names_refer_to_same_person(author_name, member.name if member else None)
-
-
-def _arxiv_author_queries(name):
-    """
-    Build one or more arXiv author search queries from a member name.
-
-    Prefers meaningful given names over prefixes like Md.
-    """
-    from services.author_matching import last_name, preferred_given_name
-
-    surname = last_name(name)
-    if not surname:
-        return []
-
-    preferred = preferred_given_name(name)
-    queries = []
-    if preferred:
-        # AND query is more reliable than "Last, First" for arXiv author lists.
-        queries.append(f"au:{preferred} AND au:{surname}")
-        queries.append(f'au:"{preferred.capitalize()} {surname.capitalize()}"')
-    else:
-        queries.append(f"au:{surname}")
-    return queries
-
-
-def _arxiv_author_query(name):
-    """Build a single targeted arXiv author search query from a member name."""
-    queries = _arxiv_author_queries(name)
-    return queries[0] if queries else None
-
-
-def _member_last_name(name):
-    """Extract a likely last name from a member display name."""
-    from services.author_matching import last_name
-
-    return last_name(name)
-
-
-def _member_given_name_tokens(name):
-    """Extract all given-name tokens."""
-    from services.author_matching import given_name_tokens
-
-    return given_name_tokens(name)
-
-
-def _member_preferred_given_name(name):
-    """Prefer a meaningful given name for search."""
-    from services.author_matching import preferred_given_name
-
-    return preferred_given_name(name)
-
-
-def _member_first_name_tokens(name):
-    """Backward-compatible alias used by older call sites."""
-    return _member_given_name_tokens(name)
-
-
-def _name_tokens(name):
-    """Normalize a person name into lowercase alphanumeric tokens."""
-    from services.author_matching import name_tokens
-
-    return name_tokens(name)
-
-
-# Kept for any older references; leading prefixes live in author_matching.
-_NAME_PREFIXES = {
-    "md",
-    "mohd",
-    "abd",
-    "abdul",
-    "al",
-}
 
 
 def _import_candidates(candidates, member=None):

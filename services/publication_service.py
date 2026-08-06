@@ -184,6 +184,75 @@ def get_all_publications_admin():
     return Publication.query.order_by(Publication.year.desc(), Publication.title).all()
 
 
+def get_publications_admin(member_id=None, search=None):
+    """Return publications for admin listing, optionally filtered by member/search."""
+    query = Publication.query
+    member_id = _parse_int(member_id)
+    if member_id:
+        query = (
+            query.join(PublicationAuthor)
+            .filter(PublicationAuthor.member_id == member_id)
+            .distinct()
+        )
+
+    search = (search or "").strip()
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                Publication.title.ilike(like),
+                Publication.venue.ilike(like),
+                Publication.doi.ilike(like),
+                Publication.source_id.ilike(like),
+            )
+        )
+
+    return query.order_by(Publication.year.desc(), Publication.title).all()
+
+
+def linked_member_names(publication):
+    """Return display names of lab members linked to a publication."""
+    names = []
+    seen = set()
+    for author in publication.ordered_authors():
+        if not author.member_id or not author.member:
+            continue
+        if author.member_id in seen:
+            continue
+        seen.add(author.member_id)
+        names.append(author.member.name)
+    return names
+
+
+def unlink_member_from_publication(publication, member_id):
+    """
+    Remove a lab-member link from a publication without deleting the paper.
+
+    Clears member_id on matching authorship rows. Returns how many rows changed.
+    """
+    member_id = _parse_int(member_id)
+    if not member_id:
+        return 0
+
+    changed = 0
+    for author in publication.authors:
+        if author.member_id == member_id:
+            author.member_id = None
+            changed += 1
+    if changed:
+        db.session.commit()
+    return changed
+
+
+def delete_publication(publication):
+    """Permanently delete a publication and its authorship rows."""
+    title = publication.title
+    publication_id = publication.id
+    db.session.delete(publication)
+    db.session.commit()
+    return {"id": publication_id, "title": title}
+
+
 def _parse_int(value):
     """Parse optional integer form values."""
     if value is None or str(value).strip() == "":
@@ -213,6 +282,8 @@ def _parse_bool(value, default=False):
 
 def _build_publication_from_data(data):
     """Create a Publication object from form data (without authors)."""
+    from services.identity_verification import normalize_arxiv_id
+
     return Publication(
         title=data.get("title", "").strip(),
         abstract=_optional_text(data.get("abstract")),
@@ -221,6 +292,8 @@ def _build_publication_from_data(data):
         type=_optional_text(data.get("type")),
         venue=_optional_text(data.get("venue")),
         doi=_optional_text(data.get("doi")),
+        arxiv_id=normalize_arxiv_id(data.get("arxiv_id"))
+        or normalize_arxiv_id(data.get("source_id") if data.get("source") == "arxiv" else None),
         url=_optional_text(data.get("url")),
         pdf_url=_optional_text(data.get("pdf_url")),
         source=_optional_text(data.get("source")),
@@ -321,6 +394,8 @@ def create_publication(data, authors_data, tag_ids=None):
 
 def update_publication(publication, data, authors_data, tag_ids=None):
     """Update a publication and replace its authors."""
+    from services.identity_verification import normalize_arxiv_id
+
     publication.title = data.get("title", publication.title).strip()
     publication.abstract = _optional_text(data.get("abstract"))
     publication.year = _parse_int(data.get("year"))
@@ -328,6 +403,11 @@ def update_publication(publication, data, authors_data, tag_ids=None):
     publication.type = _optional_text(data.get("type"))
     publication.venue = _optional_text(data.get("venue"))
     publication.doi = _optional_text(data.get("doi"))
+    arxiv_id = normalize_arxiv_id(data.get("arxiv_id"))
+    if arxiv_id:
+        publication.arxiv_id = arxiv_id
+    elif "arxiv_id" in data:
+        publication.arxiv_id = None
     publication.url = _optional_text(data.get("url"))
     publication.pdf_url = _optional_text(data.get("pdf_url"))
     publication.source = _optional_text(data.get("source"))
@@ -376,6 +456,12 @@ def import_publication(candidate, link_member_id=None, link_member_name=None):
         db.session.commit()
         return {"action": "updated", "publication_id": existing.id, "title": existing.title}
 
+    from services.identity_verification import normalize_arxiv_id
+
+    arxiv_id = normalize_arxiv_id(candidate.get("arxiv_id")) or normalize_arxiv_id(
+        candidate.get("source_id") if (candidate.get("source") or "").lower() == "arxiv" else None
+    )
+
     publication = Publication(
         title=title,
         abstract=candidate.get("abstract"),
@@ -384,6 +470,7 @@ def import_publication(candidate, link_member_id=None, link_member_name=None):
         type=candidate.get("type"),
         venue=candidate.get("venue"),
         doi=candidate.get("doi"),
+        arxiv_id=arxiv_id,
         url=candidate.get("url"),
         pdf_url=candidate.get("pdf_url"),
         source=candidate.get("source"),
@@ -401,6 +488,8 @@ def import_publication(candidate, link_member_id=None, link_member_name=None):
 
 def _merge_publication(publication, candidate):
     """Fill missing fields on an existing publication from sync metadata."""
+    from services.identity_verification import normalize_arxiv_id
+
     field_map = [
         "abstract",
         "year",
@@ -417,6 +506,12 @@ def _merge_publication(publication, candidate):
         new_value = candidate.get(field)
         if new_value and not getattr(publication, field):
             setattr(publication, field, new_value)
+
+    arxiv_id = normalize_arxiv_id(candidate.get("arxiv_id")) or normalize_arxiv_id(
+        candidate.get("source_id") if (candidate.get("source") or "").lower() == "arxiv" else None
+    )
+    if arxiv_id and not getattr(publication, "arxiv_id", None):
+        publication.arxiv_id = arxiv_id
 
     if candidate.get("is_preprint") and not publication.is_preprint:
         publication.is_preprint = True

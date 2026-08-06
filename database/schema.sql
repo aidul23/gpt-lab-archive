@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS publications (
     type TEXT,
     venue TEXT,
     doi TEXT,
+    arxiv_id TEXT,
     url TEXT,
     pdf_url TEXT,
     source TEXT,
@@ -84,3 +85,64 @@ CREATE TABLE IF NOT EXISTS publication_tags (
 
 CREATE INDEX IF NOT EXISTS idx_tags_kind ON tags(kind);
 CREATE INDEX IF NOT EXISTS idx_publication_tags_tag ON publication_tags(tag_id);
+
+CREATE TABLE IF NOT EXISTS publication_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL,
+    requester_email TEXT,
+    title TEXT NOT NULL,
+    year INTEGER,
+    doi TEXT,
+    url TEXT,
+    venue TEXT,
+    authors_text TEXT,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    submitted_at DATETIME,
+    reviewed_at DATETIME,
+    created_publication_id INTEGER,
+    FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_publication_id) REFERENCES publications(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_publication_requests_status ON publication_requests(status);
+CREATE INDEX IF NOT EXISTS idx_publication_requests_member ON publication_requests(member_id);
+
+CREATE TABLE IF NOT EXISTS publication_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL,
+    key_type TEXT NOT NULL,
+    key_value TEXT NOT NULL,
+    action TEXT NOT NULL,
+    note TEXT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    UNIQUE (member_id, key_type, key_value),
+    FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_publication_overrides_member ON publication_overrides(member_id);
+
+CREATE TABLE IF NOT EXISTS publication_match_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    year INTEGER,
+    doi TEXT,
+    arxiv_id TEXT,
+    venue TEXT,
+    authors_json TEXT,
+    score REAL,
+    score_breakdown_json TEXT,
+    payload_json TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    match_reason TEXT,
+    created_publication_id INTEGER,
+    submitted_at DATETIME,
+    reviewed_at DATETIME,
+    FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_publication_id) REFERENCES publications(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_match_candidates_status ON publication_match_candidates(status);
+CREATE INDEX IF NOT EXISTS idx_match_candidates_member ON publication_match_candidates(member_id);

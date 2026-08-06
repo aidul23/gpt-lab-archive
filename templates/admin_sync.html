@@ -5,19 +5,25 @@
 {% block content %}
 <section class="page-header">
     <h1>Sync Publications</h1>
-    <p>Import publications from ORCID, OpenAlex, Crossref, and arXiv. Duplicates are merged automatically.</p>
+    <p>
+        ORCID-anchored sync: Tier 1 ORCID works and Tier 2 OpenAlex works filtered by ORCID
+        auto-import. Name-only hits never auto-publish — they go to
+        <a href="{{ url_for('admin_match_review') }}">Match review</a>.
+        Prefer ORCID over OpenAlex Author IDs (Author IDs can split/merge).
+    </p>
 </section>
 
 <div class="info-card" style="margin-bottom: 1.5rem;">
     <h2>Sync All Registered Members</h2>
     <p>
-        Automatically sync every lab member from ORCID, OpenAlex, arXiv preprints, and Crossref DOI enrichment.
-        Members must have real ORCID or OpenAlex IDs configured for those sources to return results.
+        Runs the ORCID/OpenAlex pipeline for every active member with an ORCID,
+        then Crossref DOI enrichment. Blocklisted papers are skipped permanently.
     </p>
     <form method="post" class="action-row">
         <input type="hidden" name="action" value="sync_all">
         <input type="hidden" name="active_only" value="1">
         <button type="submit" class="btn btn-primary">Sync All Active Members Now</button>
+        <a href="{{ url_for('admin_match_review') }}" class="btn btn-secondary">Open match review</a>
     </form>
     <p class="member-meta" style="margin-top: 1rem;">
         For unattended automatic sync, run <code>python scripts/sync_all.py</code> on a schedule
@@ -28,7 +34,7 @@
 <div class="card-grid">
     <div class="info-card">
         <h2>Sync Member from ORCID</h2>
-        <p>Requires an ORCID on the member profile.</p>
+        <p>Tier 1: works claimed on the member ORCID profile (requires ORCID).</p>
         <form method="post">
             <input type="hidden" name="action" value="orcid">
             <div class="form-group">
@@ -46,7 +52,10 @@
 
     <div class="info-card">
         <h2>Sync Member from OpenAlex</h2>
-        <p>Requires an OpenAlex author ID on the member profile.</p>
+        <p>
+            Tier 2: works filtered by ORCID on authorships
+            (<code>authorships.author.orcid</code>). OpenAlex Author ID is not the sync anchor.
+        </p>
         <form method="post">
             <input type="hidden" name="action" value="openalex">
             <div class="form-group">
@@ -54,11 +63,11 @@
                 <select id="openalex_member_id" name="member_id" class="form-control" required>
                     <option value="">Select member</option>
                     {% for member in members %}
-                        <option value="{{ member.id }}">{{ member.name }}{% if member.openalex_author_id %} ({{ member.openalex_author_id }}){% endif %}</option>
+                        <option value="{{ member.id }}">{{ member.name }}{% if member.orcid %} (ORCID {{ member.orcid }}){% endif %}</option>
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-primary">Sync OpenAlex</button>
+            <button type="submit" class="btn btn-primary">Sync OpenAlex by ORCID</button>
         </form>
     </div>
 
@@ -76,24 +85,28 @@
     </div>
 
     <div class="info-card">
-        <h2>Import from arXiv</h2>
-        <p>Search by author name, title keywords, or arXiv ID.</p>
+        <h2>arXiv by ID</h2>
+        <p>
+            Safe enrichment only. Prefer <code>id:2401.01234</code>.
+            Author-name search is not identity-safe and is disabled in member auto-sync.
+        </p>
         <form method="post">
             <input type="hidden" name="action" value="arxiv">
             <div class="form-group">
-                <label for="arxiv_member_id">Link to member (optional)</label>
+                <label for="arxiv_query">Query</label>
+                <input type="text" id="arxiv_query" name="query" class="form-control"
+                       placeholder="id:2401.01234" required>
+            </div>
+            <div class="form-group">
+                <label for="arxiv_member_id">Optional member link</label>
                 <select id="arxiv_member_id" name="member_id" class="form-control">
-                    <option value="">No member link</option>
+                    <option value="">None</option>
                     {% for member in members %}
                         <option value="{{ member.id }}">{{ member.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-group">
-                <label for="query">Search query</label>
-                <input type="text" id="query" name="query" class="form-control" placeholder="au:del_maestro AND ti:quantum" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Search arXiv</button>
+            <button type="submit" class="btn btn-primary">Import from arXiv</button>
         </form>
     </div>
 </div>

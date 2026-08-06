@@ -36,14 +36,11 @@
                 <a href="{{ url_for('members') }}">Members</a>
                 <a href="{{ url_for('publications') }}">Publications</a>
                 <a href="{{ url_for('preprints') }}">Preprints</a>
-                <a href="{{ url_for('themes') }}">Themes</a>
-                <a href="{{ lab_website_url }}" target="_blank" rel="noopener" class="nav-external">Main site</a>
                 <a href="{{ url_for('member_register') }}" class="nav-cta">Add profile</a>
+                <a href="{{ url_for('publication_request_new') }}">Request paper</a>
                 {% if admin_logged_in %}
                     <a href="{{ url_for('admin_home') }}">Admin</a>
                     <a href="{{ url_for('admin_logout') }}">Logout</a>
-                {% else %}
-                    <a href="{{ url_for('admin_login') }}" class="nav-muted">Admin</a>
                 {% endif %}
             </nav>
         </div>

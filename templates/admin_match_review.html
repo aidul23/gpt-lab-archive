@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Match Review{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>Tier 3 match review</h1>
+    <p>
+        Name-only / ambiguous candidates scored above the threshold.
+        Approve to allowlist + import; reject to blocklist permanently.
+        These are never auto-published.
+    </p>
+    <div class="action-row">
+        <a href="{{ url_for('admin_sync') }}" class="btn btn-secondary">Sync tools</a>
+        <a href="{{ url_for('admin_publications') }}" class="btn btn-secondary">Manage publications</a>
+        <a href="{{ url_for('admin_home') }}" class="btn btn-secondary">Back to Admin</a>
+    </div>
+</section>
+
+{% if pending_candidates %}
+    <h2>Pending ({{ pending_candidates|length }})</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Member</th>
+                <th>Score</th>
+                <th>Signals</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pending_candidates %}
+                {% set breakdown = breakdown_dict(item) %}
+                <tr>
+                    <td>
+                        <strong>{{ item.title }}</strong>
+                        <div class="member-meta">
+                            {% for name in authors_list(item) %}{{ name }}{% if not loop.last %}; {% endif %}{% endfor %}
+                        </div>
+                        {% if item.year %}<div class="member-meta">Year: {{ item.year }}</div>{% endif %}
+                        {% if item.doi %}
+                            <div class="member-meta">DOI: <a href="https://doi.org/{{ item.doi }}" target="_blank" rel="noopener">{{ item.doi }}</a></div>
+                        {% endif %}
+                        {% if item.arxiv_id %}
+                            <div class="member-meta">arXiv: <a href="https://arxiv.org/abs/{{ item.arxiv_id }}" target="_blank" rel="noopener">{{ item.arxiv_id }}</a></div>
+                        {% endif %}
+                        {% if item.match_reason %}
+                            <div class="member-meta">{{ item.match_reason }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.member.name if item.member else '—' }}</td>
+                    <td>{{ '%.2f'|format(item.score or 0) }}</td>
+                    <td>
+                        <div class="member-meta">coauthors: {{ '%.2f'|format(breakdown.get('coauthor_overlap', 0)) }}</div>
+                        <div class="member-meta">affiliation: {{ '%.2f'|format(breakdown.get('affiliation_match', 0)) }}</div>
+                        <div class="member-meta">topic: {{ '%.2f'|format(breakdown.get('topic_similarity', 0)) }}</div>
+                        <div class="member-meta">timeline: {{ '%.2f'|format(breakdown.get('timeline_plausibility', 0)) }}</div>
+                    </td>
+                    <td class="table-actions">
+                        <form method="post"
+                              action="{{ url_for('admin_match_approve', candidate_id=item.id) }}"
+                              style="display:inline;"
+                              onsubmit="return confirm('Approve and import this paper?');">
+                            <button type="submit" class="btn btn-small btn-primary">Approve</button>
+                        </form>
+                        <form method="post"
+                              action="{{ url_for('admin_match_reject', candidate_id=item.id) }}"
+                              style="display:inline;"
+                              onsubmit="return confirm('Reject and blocklist this paper for the member?');">
+                            <button type="submit" class="btn btn-small btn-danger">Reject</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div class="empty-state">No Tier 3 candidates waiting for review.</div>
+{% endif %}
+
+{% if recent_candidates %}
+    <h2 style="margin-top: 2rem;">Recent reviews</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Member</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Reviewed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in recent_candidates if item.status != 'pending' %}
+                <tr>
+                    <td>
+                        {{ item.title }}
+                        {% if item.created_publication_id %}
+                            <div class="member-meta">
+                                <a href="{{ url_for('admin_publication_edit', publication_id=item.created_publication_id) }}">
+                                    Edit publication
+                                </a>
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.member.name if item.member else '—' }}</td>
+                    <td>{{ item.status_label() }}</td>
+                    <td>{{ '%.2f'|format(item.score or 0) }}</td>
+                    <td>{{ item.reviewed_at.strftime('%Y-%m-%d') if item.reviewed_at else '—' }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endif %}
+{% endblock %}

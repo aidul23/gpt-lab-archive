@@ -16,6 +16,21 @@ FIELD_QUERY_RE = re.compile(
 )
 
 
+def fetch_by_id(arxiv_id):
+    """
+    Fetch a single arXiv preprint by ID.
+
+    Safe for enrichment: this is an ID lookup, not an author-name search.
+    """
+    arxiv_id = (arxiv_id or "").strip()
+    if not arxiv_id:
+        return None
+    # Strip version for query stability; API accepts versioned ids too.
+    bare = re.sub(r"v\d+$", "", arxiv_id, flags=re.IGNORECASE)
+    results = fetch_works(f"id:{bare}", max_results=1)
+    return results[0] if results else None
+
+
 def fetch_works(query, max_results=10):
     """Search arXiv and return normalized preprint records."""
     query = (query or "").strip()
@@ -57,7 +72,9 @@ def fetch_works(query, max_results=10):
         publication_date = published[:10] if published else None
         entry_id = (entry.findtext("atom:id", default="", namespaces=ATOM_NS) or "").strip()
         arxiv_id = _extract_arxiv_id(entry_id)
-        pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None
+        # Store version-stripped id for dedupe / overrides.
+        bare_id = re.sub(r"v\d+$", "", arxiv_id, flags=re.IGNORECASE) if arxiv_id else None
+        pdf_url = f"https://arxiv.org/pdf/{bare_id}.pdf" if bare_id else None
 
         authors = []
         for index, author in enumerate(entry.findall("atom:author", ATOM_NS), start=1):
@@ -80,10 +97,11 @@ def fetch_works(query, max_results=10):
                 "type": map_work_type("preprint"),
                 "venue": "arXiv",
                 "doi": None,
+                "arxiv_id": bare_id,
                 "url": entry_id or None,
                 "pdf_url": pdf_url,
                 "source": "arxiv",
-                "source_id": arxiv_id,
+                "source_id": bare_id or arxiv_id,
                 "is_preprint": True,
                 "is_published": False,
                 "authors": authors,

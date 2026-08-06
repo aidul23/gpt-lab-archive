@@ -50,6 +50,35 @@ AUTO_SYNC_ON_STARTUP = os.environ.get("AUTO_SYNC_ON_STARTUP", "0") == "1"
 AUTO_SYNC_INTERVAL_HOURS = int(os.environ.get("AUTO_SYNC_INTERVAL_HOURS", "24"))
 AUTO_SYNC_ACTIVE_ONLY = os.environ.get("AUTO_SYNC_ACTIVE_ONLY", "1") == "1"
 
+# ORCID-anchored tiered matching
+# Tier 3 (name-only) candidates must score >= threshold to enter the review queue.
+# They are NEVER auto-published.
+TIER3_SCORE_THRESHOLD = float(os.environ.get("TIER3_SCORE_THRESHOLD", "0.7"))
+OPENALEX_PAGE_SIZE = int(os.environ.get("OPENALEX_PAGE_SIZE", "50"))
+OPENALEX_MAX_PAGES = int(os.environ.get("OPENALEX_MAX_PAGES", "20"))
+# Affiliation / ROR signals used by Tier 3 scoring
+LAB_AFFILIATION_KEYWORDS = [
+    part.strip()
+    for part in os.environ.get(
+        "LAB_AFFILIATION_KEYWORDS",
+        "Tampere University,Tampereen yliopisto,GPT Lab,GPT-Lab,University Consortium of Pori,UCPori",
+    ).split(",")
+    if part.strip()
+]
+LAB_ROR_IDS = [
+    part.strip()
+    for part in os.environ.get(
+        "LAB_ROR_IDS",
+        "https://ror.org/033003e23",  # Tampere University
+    ).split(",")
+    if part.strip()
+]
+# Optional career window for timeline plausibility (inclusive years)
+MEMBER_CAREER_YEAR_MIN = os.environ.get("MEMBER_CAREER_YEAR_MIN")
+MEMBER_CAREER_YEAR_MAX = os.environ.get("MEMBER_CAREER_YEAR_MAX")
+MEMBER_CAREER_YEAR_MIN = int(MEMBER_CAREER_YEAR_MIN) if MEMBER_CAREER_YEAR_MIN else None
+MEMBER_CAREER_YEAR_MAX = int(MEMBER_CAREER_YEAR_MAX) if MEMBER_CAREER_YEAR_MAX else None
+
 # Member photo uploads
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads", "members")
 ALLOWED_PHOTO_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}

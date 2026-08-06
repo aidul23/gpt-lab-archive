@@ -88,6 +88,7 @@ class Publication(db.Model):
     type = db.Column(db.String(64))
     venue = db.Column(db.String(512))
     doi = db.Column(db.String(255))
+    arxiv_id = db.Column(db.String(64))
     url = db.Column(db.String(512))
     pdf_url = db.Column(db.String(512))
     source = db.Column(db.String(64))
@@ -218,12 +219,126 @@ class PublicationTag(db.Model):
     )
 
 
+class PublicationRequest(db.Model):
+    """Member-submitted request to add a missing publication."""
+
+    __tablename__ = "publication_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(
+        db.Integer,
+        db.ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requester_email = db.Column(db.String(255))
+    title = db.Column(db.Text, nullable=False)
+    year = db.Column(db.Integer)
+    doi = db.Column(db.String(255))
+    url = db.Column(db.String(512))
+    venue = db.Column(db.String(512))
+    authors_text = db.Column(db.Text)
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(32), default="pending", nullable=False)
+    submitted_at = db.Column(db.DateTime, default=utcnow)
+    reviewed_at = db.Column(db.DateTime)
+    created_publication_id = db.Column(
+        db.Integer,
+        db.ForeignKey("publications.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    member = db.relationship("Member", backref=db.backref("publication_requests", lazy="dynamic"))
+    created_publication = db.relationship("Publication")
+
+    def status_label(self):
+        """Human-readable request status."""
+        return (self.status or "pending").replace("_", " ").title()
+
+    def __repr__(self):
+        return f"<PublicationRequest {self.id} {self.status}>"
+
+
+class PublicationOverride(db.Model):
+    """Per-member allowlist / blocklist keyed by DOI or arXiv ID."""
+
+    __tablename__ = "publication_overrides"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "member_id",
+            "key_type",
+            "key_value",
+            name="uq_publication_override_member_key",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(
+        db.Integer,
+        db.ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    key_type = db.Column(db.String(16), nullable=False)  # doi | arxiv
+    key_value = db.Column(db.String(255), nullable=False)
+    action = db.Column(db.String(16), nullable=False)  # allow | block
+    note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
+
+    member = db.relationship("Member", backref=db.backref("publication_overrides", lazy="dynamic"))
+
+    def __repr__(self):
+        return f"<PublicationOverride {self.action} {self.key_type}:{self.key_value}>"
+
+
+class PublicationMatchCandidate(db.Model):
+    """Tier 3 scored candidates awaiting manual confirmation."""
+
+    __tablename__ = "publication_match_candidates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(
+        db.Integer,
+        db.ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title = db.Column(db.Text, nullable=False)
+    year = db.Column(db.Integer)
+    doi = db.Column(db.String(255))
+    arxiv_id = db.Column(db.String(64))
+    venue = db.Column(db.String(512))
+    authors_json = db.Column(db.Text)
+    score = db.Column(db.Float)
+    score_breakdown_json = db.Column(db.Text)
+    payload_json = db.Column(db.Text)
+    status = db.Column(db.String(32), default="pending", nullable=False)
+    match_reason = db.Column(db.String(255))
+    created_publication_id = db.Column(
+        db.Integer,
+        db.ForeignKey("publications.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    submitted_at = db.Column(db.DateTime, default=utcnow)
+    reviewed_at = db.Column(db.DateTime)
+
+    member = db.relationship(
+        "Member", backref=db.backref("match_candidates", lazy="dynamic")
+    )
+    created_publication = db.relationship("Publication")
+
+    def status_label(self):
+        return (self.status or "pending").replace("_", " ").title()
+
+    def __repr__(self):
+        return f"<PublicationMatchCandidate {self.id} {self.status}>"
+
+
 def init_db(app):
     """Initialize database with the Flask app."""
     db.init_app(app)
     with app.app_context():
         db.create_all()
         _ensure_member_bio_column()
+        _ensure_publication_arxiv_column()
         _normalize_existing_author_positions()
 
 
@@ -255,3 +370,16 @@ def _ensure_member_bio_column():
         if column_name not in columns:
             db.session.execute(text(statement))
     db.session.commit()
+
+
+def _ensure_publication_arxiv_column():
+    """Add arxiv_id to publications on existing databases."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    if "publications" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("publications")}
+    if "arxiv_id" not in columns:
+        db.session.execute(text("ALTER TABLE publications ADD COLUMN arxiv_id TEXT"))
+        db.session.commit()

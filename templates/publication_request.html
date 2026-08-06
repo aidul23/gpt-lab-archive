@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Request a Paper{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>Request a missing paper</h1>
+    <p>
+        If one of your publications is missing from the {{ lab_name }} archive, submit the details here.
+        An admin will review the request and add it when confirmed.
+    </p>
+</section>
+
+<form method="post" class="info-card">
+    <div class="form-group">
+        <label for="member_id">Your member profile *</label>
+        <select id="member_id" name="member_id" class="form-control" required>
+            <option value="">Select your name</option>
+            {% for member in members %}
+                <option value="{{ member.id }}"
+                    {% if selected_member_id|string == member.id|string or request.form.get('member_id')|string == member.id|string %}selected{% endif %}>
+                    {{ member.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="requester_email">Contact email</label>
+        <input type="email" id="requester_email" name="requester_email" class="form-control"
+               value="{{ request.form.get('requester_email', '') }}"
+               placeholder="Optional — for follow-up if needed">
+    </div>
+
+    <div class="form-group">
+        <label for="title">Paper title *</label>
+        <input type="text" id="title" name="title" class="form-control" required
+               value="{{ request.form.get('title', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="authors_text">Authors</label>
+        <input type="text" id="authors_text" name="authors_text" class="form-control"
+               value="{{ request.form.get('authors_text', '') }}"
+               placeholder="Comma-separated author names">
+    </div>
+
+    <div class="form-group">
+        <label for="year">Year</label>
+        <input type="number" id="year" name="year" class="form-control" min="1900" max="2100"
+               value="{{ request.form.get('year', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="venue">Venue / journal / conference</label>
+        <input type="text" id="venue" name="venue" class="form-control"
+               value="{{ request.form.get('venue', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="doi">DOI</label>
+        <input type="text" id="doi" name="doi" class="form-control"
+               value="{{ request.form.get('doi', '') }}"
+               placeholder="10.xxxx/...">
+    </div>
+
+    <div class="form-group">
+        <label for="url">URL</label>
+        <input type="url" id="url" name="url" class="form-control"
+               value="{{ request.form.get('url', '') }}"
+               placeholder="https://arxiv.org/abs/... or publisher link">
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes for admin</label>
+        <textarea id="notes" name="notes" class="form-control" rows="4"
+                  placeholder="Anything that helps verify this is your paper.">{{ request.form.get('notes', '') }}</textarea>
+    </div>
+
+    <div class="action-row">
+        <button type="submit" class="btn btn-primary">Submit request</button>
+        <a href="{{ url_for('publications') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

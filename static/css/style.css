@@ -354,6 +354,28 @@ main.container {
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
+.pillar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-bottom: 0.9rem;
+    border-radius: 14px;
+    background: linear-gradient(145deg, rgba(78, 0, 142, 0.12), rgba(130, 200, 240, 0.18));
+    color: var(--primary);
+}
+
+.pillar-icon svg {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+.pillar-link:hover .pillar-icon {
+    background: linear-gradient(145deg, rgba(78, 0, 142, 0.18), rgba(130, 200, 240, 0.28));
+    color: var(--primary-dark);
+}
+
 .pillar-link:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-hover);
@@ -948,6 +970,18 @@ textarea {
 
 .data-table tr:hover td {
     background: rgba(78, 0, 142, 0.03);
+}
+
+.table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    min-width: 12rem;
+}
+
+.filter-actions .action-row {
+    margin-top: 0;
 }
 
 /* Alerts */

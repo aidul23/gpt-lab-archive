@@ -4,7 +4,17 @@ from urllib.parse import urlparse
 
 import config
 from database.db import init_db
-from services import auth_service, export_service, member_service, publication_service, sync_log_service, sync_service, tag_service
+from services import (
+    auth_service,
+    export_service,
+    match_candidate_service,
+    member_service,
+    publication_request_service,
+    publication_service,
+    sync_log_service,
+    sync_service,
+    tag_service,
+)
 
 
 def create_app():
@@ -145,6 +155,26 @@ def register_routes(app):
             profile=profile,
         )
 
+    @app.route("/request-paper", methods=["GET", "POST"])
+    def publication_request_new():
+        members = member_service.get_all_members()
+        selected_member_id = request.args.get("member", type=int)
+        if request.method == "POST":
+            try:
+                paper_request = publication_request_service.submit_request(request.form)
+            except ValueError as exc:
+                flash(str(exc), "danger")
+            else:
+                return render_template(
+                    "publication_request_success.html",
+                    paper_request=paper_request,
+                )
+        return render_template(
+            "publication_request.html",
+            members=members,
+            selected_member_id=selected_member_id,
+        )
+
     @app.route("/publications")
     def publications():
         filters = {
@@ -281,6 +311,8 @@ def register_routes(app):
             "admin.html",
             member_count=member_service.count_members(include_inactive=True),
             pending_member_count=member_service.count_pending_members(),
+            pending_request_count=publication_request_service.count_pending_requests(),
+            pending_match_count=match_candidate_service.count_pending_candidates(),
             publication_count=publication_service.count_publications(),
             preprint_count=publication_service.count_publications(preprints_only=True),
         )
@@ -427,10 +459,110 @@ def register_routes(app):
     @app.route("/admin/publications")
     @auth_service.admin_required
     def admin_publications():
+        selected_member_id = request.args.get("member", type=int)
+        search = request.args.get("search", "").strip()
+        selected_member = (
+            member_service.get_member_by_id(selected_member_id)
+            if selected_member_id
+            else None
+        )
+        publications = publication_service.get_publications_admin(
+            member_id=selected_member_id,
+            search=search,
+        )
+        linked_members_map = {
+            publication.id: publication_service.linked_member_names(publication)
+            for publication in publications
+        }
         return render_template(
             "admin_publications.html",
-            publications=publication_service.get_all_publications_admin(),
+            publications=publications,
+            members=member_service.get_all_members_admin(),
+            selected_member_id=selected_member_id,
+            selected_member=selected_member,
+            search=search,
+            linked_members_map=linked_members_map,
+            pending_request_count=publication_request_service.count_pending_requests(),
         )
+
+    @app.route("/admin/publication-requests")
+    @auth_service.admin_required
+    def admin_publication_requests():
+        return render_template(
+            "admin_publication_requests.html",
+            pending_requests=publication_request_service.get_pending_requests(),
+            recent_requests=publication_request_service.get_all_requests(limit=40),
+        )
+
+    @app.route("/admin/publication-requests/<int:request_id>/approve", methods=["POST"])
+    @auth_service.admin_required
+    def admin_publication_request_approve(request_id):
+        paper_request = publication_request_service.get_request_by_id(request_id)
+        if not paper_request:
+            abort(404)
+        try:
+            _, publication = publication_request_service.approve_request(paper_request)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("admin_publication_requests"))
+        flash(
+            f"Added publication '{publication.title}'. You can refine metadata below.",
+            "success",
+        )
+        return redirect(url_for("admin_publication_edit", publication_id=publication.id))
+
+    @app.route("/admin/publication-requests/<int:request_id>/reject", methods=["POST"])
+    @auth_service.admin_required
+    def admin_publication_request_reject(request_id):
+        paper_request = publication_request_service.get_request_by_id(request_id)
+        if not paper_request:
+            abort(404)
+        publication_request_service.reject_request(paper_request)
+        flash("Paper request rejected.", "success")
+        return redirect(url_for("admin_publication_requests"))
+
+    @app.route("/admin/match-review")
+    @auth_service.admin_required
+    def admin_match_review():
+        pending = match_candidate_service.get_pending_candidates()
+        return render_template(
+            "admin_match_review.html",
+            pending_candidates=pending,
+            recent_candidates=match_candidate_service.get_recent_candidates(limit=40),
+            authors_list=match_candidate_service.authors_list,
+            breakdown_dict=match_candidate_service.breakdown_dict,
+        )
+
+    @app.route("/admin/match-review/<int:candidate_id>/approve", methods=["POST"])
+    @auth_service.admin_required
+    def admin_match_approve(candidate_id):
+        candidate = match_candidate_service.get_candidate_by_id(candidate_id)
+        if not candidate:
+            abort(404)
+        try:
+            candidate, result = match_candidate_service.approve_candidate(candidate)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("admin_match_review"))
+        flash(
+            f"Approved and imported '{candidate.title}' ({result.get('action')}).",
+            "success",
+        )
+        if result.get("publication_id"):
+            return redirect(
+                url_for("admin_publication_edit", publication_id=result["publication_id"])
+            )
+        return redirect(url_for("admin_match_review"))
+
+    @app.route("/admin/match-review/<int:candidate_id>/reject", methods=["POST"])
+    @auth_service.admin_required
+    def admin_match_reject(candidate_id):
+        candidate = match_candidate_service.get_candidate_by_id(candidate_id)
+        if not candidate:
+            abort(404)
+        match_candidate_service.reject_candidate(candidate)
+        flash(f"Rejected and blocklisted '{candidate.title}'.", "success")
+        return redirect(url_for("admin_match_review"))
 
     @app.route("/admin/publications/export.csv")
     @auth_service.admin_required
@@ -558,6 +690,59 @@ def register_routes(app):
         publication_service.toggle_visibility(publication)
         state = "visible" if publication.is_visible else "hidden"
         flash(f"Publication marked as {state}.", "success")
+        return _admin_publications_redirect()
+
+    @app.route("/admin/publications/<int:publication_id>/unlink-member", methods=["POST"])
+    @auth_service.admin_required
+    def admin_publication_unlink_member(publication_id):
+        publication = publication_service.get_publication_by_id_admin(publication_id)
+        if not publication:
+            abort(404)
+        member_id = request.form.get("member_id", type=int)
+        member = member_service.get_member_by_id(member_id) if member_id else None
+        also_block = request.form.get("also_block") == "1"
+        changed = publication_service.unlink_member_from_publication(publication, member_id)
+        if changed and member:
+            message = f"Unlinked {member.name} from '{publication.title}'."
+            if also_block:
+                from services.pipeline.overrides import block_record_for_member
+
+                block_record_for_member(
+                    member.id,
+                    {
+                        "doi": publication.doi,
+                        "arxiv_id": getattr(publication, "arxiv_id", None)
+                        or (
+                            publication.source_id
+                            if (publication.source or "").lower() == "arxiv"
+                            else None
+                        ),
+                    },
+                    note=f"Blocked after unlink from publication #{publication.id}",
+                )
+                message += " Added to member blocklist."
+            flash(message, "success")
+        elif not member:
+            flash("Member is required to unlink.", "danger")
+        else:
+            flash("No authorship link found for that member.", "danger")
+        return _admin_publications_redirect()
+
+    @app.route("/admin/publications/<int:publication_id>/delete", methods=["POST"])
+    @auth_service.admin_required
+    def admin_publication_delete(publication_id):
+        publication = publication_service.get_publication_by_id_admin(publication_id)
+        if not publication:
+            abort(404)
+        result = publication_service.delete_publication(publication)
+        flash(f"Deleted publication '{result['title']}'.", "success")
+        return _admin_publications_redirect()
+
+    def _admin_publications_redirect():
+        """Return to the publications list, preserving filter when provided."""
+        next_url = request.form.get("next") or ""
+        if next_url.startswith("/admin/publications"):
+            return redirect(next_url)
         return redirect(url_for("admin_publications"))
 
     @app.route("/admin/sync", methods=["GET", "POST"])
