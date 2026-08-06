@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>{{ lab_name }} Admin</h1>
+    <p>Sign in to manage members and publications for {{ lab_name }}.</p>
+</section>
+
+<form method="post" class="info-card" style="max-width: 420px;">
+    <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" class="form-control" required autofocus>
+    </div>
+
+    <div class="action-row">
+        <button type="submit" class="btn btn-primary">Log In</button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

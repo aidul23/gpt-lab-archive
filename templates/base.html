@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block meta_description %}{{ site_description }}{% endblock %}">
+    <title>{% block title %}Home{% endblock %} | {{ lab_name }} {{ archive_title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display&display=swap" rel="stylesheet">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="page-atmosphere" aria-hidden="true"></div>
+    <header class="site-header">
+        <div class="container site-header-inner">
+            <a href="{{ url_for('index') }}" class="site-brand">
+                <img
+                    src="{{ url_for('static', filename='img/gpt-lab-seal.png') }}"
+                    alt="{{ lab_name }} seal"
+                    class="site-brand-logo"
+                    width="56"
+                    height="56"
+                >
+                <span class="site-brand-text">
+                    <span class="site-brand-mark">{{ lab_name }} <span class="site-brand-archive">Archive</span></span>
+                    <span class="site-brand-subtitle">Publications & Research</span>
+                </span>
+            </a>
+            <nav class="site-nav" aria-label="Main navigation">
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('members') }}">Members</a>
+                <a href="{{ url_for('publications') }}">Publications</a>
+                <a href="{{ url_for('preprints') }}">Preprints</a>
+                <a href="{{ url_for('themes') }}">Themes</a>
+                <a href="{{ lab_website_url }}" target="_blank" rel="noopener" class="nav-external">Main site</a>
+                <a href="{{ url_for('member_register') }}" class="nav-cta">Add profile</a>
+                {% if admin_logged_in %}
+                    <a href="{{ url_for('admin_home') }}">Admin</a>
+                    <a href="{{ url_for('admin_logout') }}">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('admin_login') }}" class="nav-muted">Admin</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container site-footer-inner">
+            <div class="site-footer-brand">
+                <img
+                    src="{{ url_for('static', filename='img/gpt-lab-seal.png') }}"
+                    alt="{{ lab_name }} seal"
+                    class="site-footer-logo"
+                    width="72"
+                    height="72"
+                >
+                <strong>{{ lab_name }} {{ archive_title }}</strong>
+                <span>{{ archive_tagline }}</span>
+            </div>
+            <div class="site-footer-links">
+                <a href="{{ lab_website_url }}" target="_blank" rel="noopener">GPT Lab main website</a>
+                <a href="{{ university_url }}" target="_blank" rel="noopener">{{ university_name }}</a>
+                <a href="{{ url_for('members') }}">Members</a>
+                <a href="{{ url_for('publications') }}">Publications</a>
+                <a href="{{ url_for('themes') }}">Research themes</a>
+            </div>
+            <p class="site-footer-copy">
+                Part of <a href="{{ lab_website_url }}" target="_blank" rel="noopener">{{ lab_name }}</a>
+                at {{ university_name }}
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

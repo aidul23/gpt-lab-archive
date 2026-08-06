@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<section class="hero-section animate-in">
+    <div class="hero-content">
+        <p class="hero-eyebrow">{{ lab_name }}</p>
+        <h1>{{ lab_name }} <span class="hero-title-accent">Archive</span></h1>
+        <p class="hero-lead">
+            {{ archive_tagline }}
+        </p>
+        <div class="action-row hero-actions">
+            <a href="{{ url_for('publications') }}" class="btn btn-primary">Browse publications</a>
+            <a href="{{ url_for('members') }}" class="btn btn-secondary">View members</a>
+            <a href="{{ lab_website_url }}" target="_blank" rel="noopener" class="btn btn-outline">gpt-lab.eu</a>
+        </div>
+    </div>
+    <div class="hero-visual">
+        <img
+            src="{{ url_for('static', filename='img/gpt-lab-seal.png') }}"
+            alt="{{ lab_name }} seal"
+            class="hero-logo"
+            width="180"
+            height="180"
+        >
+    </div>
+</section>
+
+<section class="stats-grid animate-in animate-delay-1">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_publications }}</div>
+        <div class="stat-label">Publications</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_preprints }}</div>
+        <div class="stat-label">Preprints</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_members }}</div>
+        <div class="stat-label">Lab members</div>
+    </div>
+</section>
+
+<section class="home-pillars animate-in animate-delay-2">
+    <a href="{{ url_for('members') }}" class="pillar-link">
+        <h2>Members</h2>
+        <p>Research tracks and profiles across the lab.</p>
+        <span class="pillar-cta">Explore →</span>
+    </a>
+    <a href="{{ url_for('publications') }}" class="pillar-link">
+        <h2>Publications</h2>
+        <p>Papers and preprints in one searchable archive.</p>
+        <span class="pillar-cta">Browse →</span>
+    </a>
+    <a href="{{ url_for('themes') }}" class="pillar-link">
+        <h2>Themes</h2>
+        <p>Research interests mapped to published work.</p>
+        <span class="pillar-cta">View themes →</span>
+    </a>
+</section>
+
+<section class="home-section animate-in animate-delay-3">
+    <div class="section-heading">
+        <h2>Recent publications</h2>
+        <a href="{{ url_for('publications') }}" class="section-link">View all</a>
+    </div>
+    {% if recent_publications %}
+        <div class="card-grid">
+            {% for publication in recent_publications %}
+                {% include "partials/publication_card.html" %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">No publications yet.</div>
+    {% endif %}
+</section>
+
+<section class="home-about animate-in">
+    <div class="home-about-copy">
+        <h2>About {{ lab_name }}</h2>
+        <p>{{ lab_tagline }}</p>
+        <p class="member-meta">
+            This archive complements the main lab website for news, projects, and collaboration.
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{{ lab_website_url }}" target="_blank" rel="noopener" class="btn btn-secondary">Visit gpt-lab.eu</a>
+        <a href="{{ url_for('member_register') }}" class="btn btn-outline">Submit your profile</a>
+    </div>
+</section>
+{% endblock %}

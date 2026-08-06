@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{% if member %}Edit Member{% else %}Add Member{% endif %} | Admin{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>{% if member %}Edit Member{% else %}Add Member{% endif %}</h1>
+    {% if member %}
+        {% if member.approval_status == 'pending' %}
+            <p>Review this self-submitted profile, verify the details, then approve or reject it.</p>
+        {% else %}
+            <p>Save this profile to refresh publications from ORCID, OpenAlex, arXiv preprints, and Crossref.</p>
+        {% endif %}
+    {% else %}
+        <p>After you create a profile, the app automatically loads that member's papers and preprints.</p>
+    {% endif %}
+</section>
+
+{% if member %}
+    <div class="info-card review-status-card">
+        <div class="badge-row">
+            {% if member.approval_status == 'pending' %}
+                <span class="badge badge-pending">Pending approval</span>
+            {% elif member.approval_status == 'approved' %}
+                <span class="badge badge-approved">Approved</span>
+            {% else %}
+                <span class="badge badge-rejected">Rejected</span>
+            {% endif %}
+            {% if member.is_self_registered %}
+                <span class="badge badge-tag">Self-registered</span>
+            {% endif %}
+        </div>
+        {% if member.submitted_at %}
+            <p class="member-meta">Submitted {{ member.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+        {% endif %}
+        {% if member.reviewed_at %}
+            <p class="member-meta">Reviewed {{ member.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+        {% endif %}
+        {% if member.approval_status == 'pending' %}
+            <div class="action-row">
+                <form method="post" action="{{ url_for('admin_member_approve', member_id=member.id) }}">
+                    <button type="submit" class="btn btn-primary">Approve Profile</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_member_reject', member_id=member.id) }}">
+                    <button type="submit" class="btn btn-danger">Reject Profile</button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="info-card">
+    <div class="form-group">
+        <label for="name">Name *</label>
+        <input type="text" id="name" name="name" class="form-control" required
+               value="{{ member.name if member else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="role">Role</label>
+        <input type="text" id="role" name="role" class="form-control"
+               value="{{ member.role if member and member.role else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" class="form-control"
+               value="{{ member.email if member and member.email else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="orcid">ORCID</label>
+        <input type="text" id="orcid" name="orcid" class="form-control"
+               value="{{ member.orcid if member and member.orcid else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="openalex_author_id">OpenAlex Author ID</label>
+        <input type="text" id="openalex_author_id" name="openalex_author_id" class="form-control"
+               value="{{ member.openalex_author_id if member and member.openalex_author_id else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="profile_url">Profile URL</label>
+        <input type="url" id="profile_url" name="profile_url" class="form-control"
+               value="{{ member.profile_url if member and member.profile_url else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="photo">Profile photo</label>
+        <input type="file" id="photo" name="photo" class="form-control"
+               accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
+        <p class="form-help">Upload a PNG, JPG, GIF, or WEBP file (max {{ config.MAX_UPLOAD_SIZE_MB }} MB).</p>
+        {% if member %}
+            <div class="member-form-preview">
+                <img src="{{ member.photo_display_url() }}" alt="Preview of {{ member.name }}" class="member-avatar member-avatar-medium">
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="form-group">
+        <label for="bio">Bio</label>
+        <textarea id="bio" name="bio" class="form-control" rows="4"
+                  placeholder="Short research bio shown on the member profile page.">{% if member and member.bio %}{{ member.bio }}{% endif %}</textarea>
+    </div>
+
+    <div class="form-group checkbox-row">
+        <input type="checkbox" id="active" name="active" value="1"
+               {% if not member or member.active %}checked{% endif %}>
+        <label for="active">Active member</label>
+    </div>
+
+    <div class="action-row">
+        <button type="submit" class="btn btn-primary">Save{% if member %} &amp; Sync Publications{% else %} &amp; Load Publications{% endif %}</button>
+        <a href="{{ url_for('admin_members') }}" class="btn btn-secondary">Cancel</a>
+        {% if member %}
+            <a href="{{ url_for('admin_member_delete', member_id=member.id) }}" class="btn btn-danger">Delete Member</a>
+        {% endif %}
+    </div>
+</form>
+
+{% if member and member.is_publicly_visible() %}
+    <form method="post" action="{{ url_for('admin_member_sync', member_id=member.id) }}" class="info-card" style="margin-top: 1rem;">
+        <h3>Publication Sync</h3>
+        <p class="member-meta">
+            Re-import this member's published papers from ORCID/OpenAlex and their arXiv preprints
+            (matched by author name). Requires ORCID and/or OpenAlex ID for published works.
+        </p>
+        <button type="submit" class="btn btn-secondary">Sync Publications Now</button>
+        <a href="{{ url_for('member_detail', member_id=member.id) }}" class="btn btn-secondary">View Public Profile</a>
+    </form>
+{% elif member and member.approval_status == 'pending' %}
+    <div class="info-card" style="margin-top: 1rem;">
+        <h3>Publication Sync</h3>
+        <p class="member-meta">
+            Publications are imported automatically after you approve this profile.
+        </p>
+    </div>
+{% endif %}
+{% endblock %}

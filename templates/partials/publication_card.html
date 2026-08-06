@@ -1,0 +1,52 @@
+<div class="publication-card">
+    <div class="badge-row">
+        {% if publication.is_preprint %}
+            <span class="badge badge-preprint">Preprint</span>
+        {% endif %}
+        {% if publication.is_published and not publication.is_preprint %}
+            <span class="badge badge-published">Published</span>
+        {% endif %}
+        {% if publication.type == 'article' %}
+            <span class="badge badge-article">Article</span>
+        {% elif publication.type == 'conference' %}
+            <span class="badge badge-conference">Conference</span>
+        {% elif publication.type == 'dataset' %}
+            <span class="badge badge-dataset">Dataset</span>
+        {% elif publication.type %}
+            <span class="badge">{{ publication.type|capitalize }}</span>
+        {% endif %}
+        {% for theme in publication.tags_by_kind('theme') %}
+            <a href="{{ url_for('theme_detail', slug=theme.slug) }}" class="badge badge-theme">{{ theme.name }}</a>
+        {% endfor %}
+        {% for tag in publication.tags_by_kind('tag') %}
+            <a href="{{ url_for('publications', tag=tag.id) }}" class="badge badge-tag">{{ tag.name }}</a>
+        {% endfor %}
+    </div>
+
+    <h3>
+        <a href="{{ url_for('publication_detail', publication_id=publication.id) }}">
+            {{ publication.title }}
+        </a>
+    </h3>
+
+    <div class="publication-meta">
+        {% if publication.year %}<span>{{ publication.year }}</span> &middot; {% endif %}
+        <span>{{ publication.author_display() }}</span>
+        {% if publication.venue %} &middot; <span><em>{{ publication.venue }}</em></span>{% endif %}
+    </div>
+
+    <div class="link-row">
+        {% if publication.doi %}
+            <a href="https://doi.org/{{ publication.doi }}" target="_blank" rel="noopener">DOI</a>
+        {% endif %}
+        {% if publication.url %}
+            <a href="{{ publication.url }}" target="_blank" rel="noopener">Link</a>
+        {% endif %}
+        {% if publication.pdf_url %}
+            <a href="{{ publication.pdf_url }}" target="_blank" rel="noopener">PDF</a>
+        {% endif %}
+        {% if publication.source %}
+            <span>Source: {{ publication.source }}</span>
+        {% endif %}
+    </div>
+</div>

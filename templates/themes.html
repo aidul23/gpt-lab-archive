@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Research Themes{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>{{ lab_name }} Research Themes</h1>
+    <p>Browse publications by research area within {{ lab_name }}.</p>
+</section>
+
+{% if themes %}
+    <div class="card-grid">
+        {% for item in themes %}
+            <article class="member-card">
+                <h3>
+                    <a href="{{ url_for('theme_detail', slug=item.theme.slug) }}">{{ item.theme.name }}</a>
+                </h3>
+                {% if item.theme.description %}
+                    <div class="member-meta">{{ item.theme.description }}</div>
+                {% endif %}
+                <div class="link-row">
+                    <span>{{ item.count }} publication{{ 's' if item.count != 1 else '' }}</span>
+                    <a href="{{ url_for('theme_detail', slug=item.theme.slug) }}">View publications</a>
+                </div>
+            </article>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">No research themes defined yet.</div>
+{% endif %}
+{% endblock %}

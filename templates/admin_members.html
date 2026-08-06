@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Members{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>Manage Members</h1>
+    <div class="action-row">
+        <a href="{{ url_for('admin_member_new') }}" class="btn btn-primary">Add Member</a>
+        <a href="{{ url_for('admin_home') }}" class="btn btn-secondary">Back to Admin</a>
+    </div>
+</section>
+
+{% if pending_members %}
+    <section class="info-card pending-members-section">
+        <h2>Pending Approval ({{ pending_members|length }})</h2>
+        <p class="member-meta">Review self-submitted profiles before they appear on the public site.</p>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Email</th>
+                    <th>Submitted</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for member in pending_members %}
+                    <tr>
+                        <td>{{ member.name }}</td>
+                        <td>{{ member.role or '—' }}</td>
+                        <td>{{ member.email or '—' }}</td>
+                        <td>
+                            {% if member.submitted_at %}
+                                {{ member.submitted_at.strftime('%Y-%m-%d') }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('admin_member_edit', member_id=member.id) }}" class="btn btn-small btn-primary">Review</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+{% endif %}
+
+{% if members %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Email</th>
+                <th>Approval</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for member in members %}
+                <tr>
+                    <td>
+                        {{ member.name }}
+                        {% if member.is_self_registered %}
+                            <span class="badge badge-tag">Self-registered</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ member.role or '—' }}</td>
+                    <td>{{ member.email or '—' }}</td>
+                    <td>
+                        {% if member.approval_status == 'pending' %}
+                            <span class="badge badge-pending">Pending</span>
+                        {% elif member.approval_status == 'approved' %}
+                            <span class="badge badge-approved">Approved</span>
+                        {% else %}
+                            <span class="badge badge-rejected">Rejected</span>
+                        {% endif %}
+                    </td>
+                    <td>{% if member.active %}Active{% else %}Inactive{% endif %}</td>
+                    <td>
+                        <a href="{{ url_for('admin_member_edit', member_id=member.id) }}" class="btn btn-small btn-secondary">Edit</a>
+                        <a href="{{ url_for('admin_member_delete', member_id=member.id) }}" class="btn btn-small btn-danger">Delete</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div class="empty-state">No members yet.</div>
+{% endif %}
+{% endblock %}

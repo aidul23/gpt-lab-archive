@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Join {{ lab_name }}{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>Join {{ lab_name }}</h1>
+    <p>
+        Create your member profile for the {{ lab_name }} research group at {{ university_name }}.
+        An admin will review your submission before it appears on the public site.
+    </p>
+</section>
+
+<form method="post" enctype="multipart/form-data" class="info-card">
+    <div class="form-group">
+        <label for="name">Full name *</label>
+        <input type="text" id="name" name="name" class="form-control" required
+               value="{{ request.form.get('name', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="role">Role</label>
+        <input type="text" id="role" name="role" class="form-control"
+               placeholder="e.g. PhD Student, Postdoctoral Researcher"
+               value="{{ request.form.get('role', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" class="form-control"
+               value="{{ request.form.get('email', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="orcid">ORCID</label>
+        <input type="text" id="orcid" name="orcid" class="form-control"
+               placeholder="0000-0000-0000-0000"
+               value="{{ request.form.get('orcid', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="openalex_author_id">OpenAlex Author ID</label>
+        <input type="text" id="openalex_author_id" name="openalex_author_id" class="form-control"
+               placeholder="A1234567890"
+               value="{{ request.form.get('openalex_author_id', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="profile_url">External profile URL</label>
+        <input type="url" id="profile_url" name="profile_url" class="form-control"
+               placeholder="https://example.edu/people/your-name"
+               value="{{ request.form.get('profile_url', '') }}">
+    </div>
+
+    <div class="form-group">
+        <label for="photo">Profile photo</label>
+        <input type="file" id="photo" name="photo" class="form-control"
+               accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
+        <p class="form-help">Upload a PNG, JPG, GIF, or WEBP file (max {{ config.MAX_UPLOAD_SIZE_MB }} MB).</p>
+    </div>
+
+    <div class="form-group">
+        <label for="bio">Bio</label>
+        <textarea id="bio" name="bio" class="form-control" rows="5"
+                  placeholder="Brief research bio shown on your public profile.">{{ request.form.get('bio', '') }}</textarea>
+    </div>
+
+    <div class="action-row">
+        <button type="submit" class="btn btn-primary">Submit for Review</button>
+        <a href="{{ url_for('members') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

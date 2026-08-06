@@ -1,0 +1,8 @@
+{% macro member_avatar(member, size='medium') %}
+<img
+    src="{{ member.photo_display_url() }}"
+    alt="Photo of {{ member.name }}"
+    class="member-avatar member-avatar-{{ size }}"
+    loading="lazy"
+>
+{% endmacro %}

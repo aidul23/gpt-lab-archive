@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Publications{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>{{ lab_name }} Publications</h1>
+    <p>Published research from the {{ lab_name }} group at {{ university_name }}.</p>
+</section>
+
+<form class="filter-panel" method="get" action="{{ url_for('publications') }}">
+    <div class="filter-grid">
+        <div class="form-group">
+            <label for="search">Search</label>
+            <input type="text" id="search" name="search" class="form-control"
+                   value="{{ filters.search }}" placeholder="Title, venue, author, DOI">
+        </div>
+        <div class="form-group">
+            <label for="year">Year</label>
+            <select id="year" name="year" class="form-control">
+                <option value="">All years</option>
+                {% for year in filter_options.years %}
+                    <option value="{{ year }}" {% if filters.year|string == year|string %}selected{% endif %}>
+                        {{ year }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="type">Type</label>
+            <select id="type" name="type" class="form-control">
+                <option value="">All types</option>
+                {% for pub_type in filter_options.types %}
+                    <option value="{{ pub_type }}" {% if filters.type == pub_type %}selected{% endif %}>
+                        {{ pub_type|capitalize }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="member">Member</label>
+            <select id="member" name="member" class="form-control">
+                <option value="">All members</option>
+                {% for member in filter_options.members %}
+                    <option value="{{ member.id }}" {% if filters.member|string == member.id|string %}selected{% endif %}>
+                        {{ member.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="preprint_status">Status</label>
+            <select id="preprint_status" name="preprint_status" class="form-control">
+                <option value="">All</option>
+                <option value="published" {% if filters.preprint_status == 'published' %}selected{% endif %}>Published only</option>
+                <option value="preprint" {% if filters.preprint_status == 'preprint' %}selected{% endif %}>Preprints only</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="theme">Theme</label>
+            <select id="theme" name="theme" class="form-control">
+                <option value="">All themes</option>
+                {% for theme in filter_options.themes %}
+                    <option value="{{ theme.id }}" {% if filters.theme|string == theme.id|string %}selected{% endif %}>
+                        {{ theme.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="tag">Tag</label>
+            <select id="tag" name="tag" class="form-control">
+                <option value="">All tags</option>
+                {% for tag in filter_options.tags %}
+                    <option value="{{ tag.id }}" {% if filters.tag|string == tag.id|string %}selected{% endif %}>
+                        {{ tag.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="action-row">
+        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        <a href="{{ url_for('publications') }}" class="btn btn-secondary">Clear</a>
+        <a href="{{ url_for('export_publications_csv', **filters) }}" class="btn btn-secondary">Export CSV</a>
+        <a href="{{ url_for('export_publications_bib', **filters) }}" class="btn btn-secondary">Export BibTeX</a>
+    </div>
+</form>
+
+{% if publications %}
+    <div class="card-grid">
+        {% for publication in publications %}
+            {% include "partials/publication_card.html" %}
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">No publications match your filters.</div>
+{% endif %}
+{% endblock %}

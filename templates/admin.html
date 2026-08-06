@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>{{ lab_name }} Admin</h1>
+    <p>Manage members, publications, and sync settings for {{ lab_name }}.</p>
+</section>
+
+<section class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ member_count }}</div>
+        <div class="stat-label">Lab Members</div>
+    </div>
+    {% if pending_member_count %}
+        <div class="stat-card">
+            <div class="stat-value">{{ pending_member_count }}</div>
+            <div class="stat-label">Pending Profiles</div>
+        </div>
+    {% endif %}
+    <div class="stat-card">
+        <div class="stat-value">{{ publication_count }}</div>
+        <div class="stat-label">Visible Publications</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ preprint_count }}</div>
+        <div class="stat-label">Preprints</div>
+    </div>
+</section>
+
+<div class="card-grid">
+    <div class="info-card">
+        <h2>Members</h2>
+        <p>Add, edit, approve, and manage lab member profiles.</p>
+        <div class="action-row">
+            <a href="{{ url_for('admin_members') }}" class="btn btn-primary">Manage Members</a>
+            <a href="{{ url_for('admin_member_new') }}" class="btn btn-secondary">Add Member</a>
+        </div>
+        {% if pending_member_count %}
+            <p class="member-meta">{{ pending_member_count }} profile(s) waiting for approval.</p>
+        {% endif %}
+    </div>
+    <div class="info-card">
+        <h2>Publications</h2>
+        <p>Add publications manually and link them to lab members.</p>
+        <div class="action-row">
+            <a href="{{ url_for('admin_publications') }}" class="btn btn-primary">Manage Publications</a>
+            <a href="{{ url_for('admin_publication_new') }}" class="btn btn-secondary">Add Publication</a>
+        </div>
+    </div>
+    <div class="info-card">
+        <h2>Sync</h2>
+        <p>Import publications from ORCID, OpenAlex, Crossref, and arXiv.</p>
+        <div class="action-row">
+            <a href="{{ url_for('admin_sync') }}" class="btn btn-primary">Open Sync Tools</a>
+        </div>
+    </div>
+    <div class="info-card">
+        <h2>Tags & Themes</h2>
+        <p>Organize publications with labels and research themes.</p>
+        <div class="action-row">
+            <a href="{{ url_for('admin_tags') }}" class="btn btn-primary">Manage Tags & Themes</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

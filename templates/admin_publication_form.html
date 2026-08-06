@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}{% if publication %}Edit Publication{% else %}Add Publication{% endif %} | Admin{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>{% if publication %}Edit Publication{% else %}Add Publication{% endif %}</h1>
+</section>
+
+<form method="post" class="info-card">
+    <div class="form-group">
+        <label for="title">Title *</label>
+        <input type="text" id="title" name="title" class="form-control" required
+               value="{{ publication.title if publication else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="abstract">Abstract</label>
+        <textarea id="abstract" name="abstract" class="form-control">{% if publication and publication.abstract %}{{ publication.abstract }}{% endif %}</textarea>
+    </div>
+
+    <div class="filter-grid">
+        <div class="form-group">
+            <label for="year">Year</label>
+            <input type="number" id="year" name="year" class="form-control"
+                   value="{{ publication.year if publication and publication.year else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="publication_date">Publication Date</label>
+            <input type="text" id="publication_date" name="publication_date" class="form-control"
+                   placeholder="YYYY-MM-DD"
+                   value="{{ publication.publication_date if publication and publication.publication_date else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="type">Type</label>
+            <select id="type" name="type" class="form-control">
+                <option value="">Select type</option>
+                {% for pub_type in ['article', 'conference', 'dataset'] %}
+                    <option value="{{ pub_type }}"
+                        {% if publication and publication.type == pub_type %}selected{% endif %}>
+                        {{ pub_type|capitalize }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="venue">Venue</label>
+        <input type="text" id="venue" name="venue" class="form-control"
+               value="{{ publication.venue if publication and publication.venue else '' }}">
+    </div>
+
+    <div class="filter-grid">
+        <div class="form-group">
+            <label for="doi">DOI</label>
+            <input type="text" id="doi" name="doi" class="form-control"
+                   value="{{ publication.doi if publication and publication.doi else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="url">URL</label>
+            <input type="url" id="url" name="url" class="form-control"
+                   value="{{ publication.url if publication and publication.url else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="pdf_url">PDF URL</label>
+            <input type="url" id="pdf_url" name="pdf_url" class="form-control"
+                   value="{{ publication.pdf_url if publication and publication.pdf_url else '' }}">
+        </div>
+    </div>
+
+    <div class="filter-grid">
+        <div class="form-group">
+            <label for="source">Source</label>
+            <input type="text" id="source" name="source" class="form-control"
+                   placeholder="orcid, openalex, crossref, arxiv, manual"
+                   value="{{ publication.source if publication and publication.source else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="source_id">Source ID</label>
+            <input type="text" id="source_id" name="source_id" class="form-control"
+                   value="{{ publication.source_id if publication and publication.source_id else '' }}">
+        </div>
+    </div>
+
+    <div class="filter-grid">
+        <div class="form-group checkbox-row">
+            <input type="checkbox" id="is_preprint" name="is_preprint" value="1"
+                   {% if publication and publication.is_preprint %}checked{% endif %}>
+            <label for="is_preprint">Preprint</label>
+        </div>
+        <div class="form-group checkbox-row">
+            <input type="checkbox" id="is_published" name="is_published" value="1"
+                   {% if not publication or publication.is_published %}checked{% endif %}>
+            <label for="is_published">Published</label>
+        </div>
+        <div class="form-group checkbox-row">
+            <input type="checkbox" id="is_visible" name="is_visible" value="1"
+                   {% if not publication or publication.is_visible %}checked{% endif %}>
+            <label for="is_visible">Visible on public site</label>
+        </div>
+    </div>
+
+    <section class="author-block">
+        <h3>Research Themes</h3>
+        <div class="badge-row">
+            {% for theme in all_themes %}
+                <label class="checkbox-row">
+                    <input type="checkbox" name="tag_ids" value="{{ theme.id }}"
+                           {% if publication and theme in publication.tags %}checked{% endif %}>
+                    {{ theme.name }}
+                </label>
+            {% else %}
+                <p class="member-meta">No themes yet. <a href="{{ url_for('admin_tag_new', kind='theme') }}">Add one</a>.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="author-block">
+        <h3>Tags</h3>
+        <div class="badge-row">
+            {% for tag in all_tags %}
+                <label class="checkbox-row">
+                    <input type="checkbox" name="tag_ids" value="{{ tag.id }}"
+                           {% if publication and tag in publication.tags %}checked{% endif %}>
+                    {{ tag.name }}
+                </label>
+            {% else %}
+                <p class="member-meta">No tags yet. <a href="{{ url_for('admin_tag_new', kind='tag') }}">Add one</a>.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="author-block">
+        <h3>Authors</h3>
+        <p>Add author names and optionally link them to lab members.</p>
+
+        <div id="author-list">
+            {% if publication and publication.authors %}
+                {% for author in publication.authors %}
+                    <div class="author-entry">
+                        <input type="text" name="author_name_{{ loop.index0 }}" class="form-control"
+                               placeholder="Author name" value="{{ author.author_name }}" required>
+                        <select name="member_id_{{ loop.index0 }}" class="form-control">
+                            <option value="">No member link</option>
+                            {% for member in members %}
+                                <option value="{{ member.id }}"
+                                    {% if author.member_id == member.id %}selected{% endif %}>
+                                    {{ member.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="number" name="author_position_{{ loop.index0 }}" class="form-control"
+                               placeholder="Position" value="{{ author.author_position or loop.index }}" style="max-width:120px;">
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="author-entry">
+                    <input type="text" name="author_name_0" class="form-control" placeholder="Author name">
+                    <select name="member_id_0" class="form-control">
+                        <option value="">No member link</option>
+                        {% for member in members %}
+                            <option value="{{ member.id }}">{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="number" name="author_position_0" class="form-control"
+                           placeholder="Position" value="1" style="max-width:120px;">
+                </div>
+            {% endif %}
+        </div>
+
+        <button type="button" class="btn btn-secondary btn-small" id="add-author-btn">Add Author</button>
+    </section>
+
+    <div class="action-row">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="{{ url_for('admin_publications') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<script>
+    (function () {
+        const authorList = document.getElementById("author-list");
+        const addBtn = document.getElementById("add-author-btn");
+        const members = [
+            {% for member in members %}
+                { id: "{{ member.id }}", name: {{ member.name|tojson }} }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        addBtn.addEventListener("click", function () {
+            const index = authorList.querySelectorAll(".author-entry").length;
+            const entry = document.createElement("div");
+            entry.className = "author-entry";
+
+            let memberOptions = '<option value="">No member link</option>';
+            members.forEach(function (member) {
+                memberOptions += '<option value="' + member.id + '">' + member.name + '</option>';
+            });
+
+            entry.innerHTML =
+                '<input type="text" name="author_name_' + index + '" class="form-control" placeholder="Author name">' +
+                '<select name="member_id_' + index + '" class="form-control">' + memberOptions + '</select>' +
+                '<input type="number" name="author_position_' + index + '" class="form-control" placeholder="Position" value="' + (index + 1) + '" style="max-width:120px;">';
+
+            authorList.appendChild(entry);
+        });
+    })();
+</script>
+{% endblock %}

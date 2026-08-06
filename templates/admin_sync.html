@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Publications | Admin{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>Sync Publications</h1>
+    <p>Import publications from ORCID, OpenAlex, Crossref, and arXiv. Duplicates are merged automatically.</p>
+</section>
+
+<div class="info-card" style="margin-bottom: 1.5rem;">
+    <h2>Sync All Registered Members</h2>
+    <p>
+        Automatically sync every lab member from ORCID, OpenAlex, arXiv preprints, and Crossref DOI enrichment.
+        Members must have real ORCID or OpenAlex IDs configured for those sources to return results.
+    </p>
+    <form method="post" class="action-row">
+        <input type="hidden" name="action" value="sync_all">
+        <input type="hidden" name="active_only" value="1">
+        <button type="submit" class="btn btn-primary">Sync All Active Members Now</button>
+    </form>
+    <p class="member-meta" style="margin-top: 1rem;">
+        For unattended automatic sync, run <code>python scripts/sync_all.py</code> on a schedule
+        or set <code>AUTO_SYNC_ENABLED=1</code> before starting the app.
+    </p>
+</div>
+
+<div class="card-grid">
+    <div class="info-card">
+        <h2>Sync Member from ORCID</h2>
+        <p>Requires an ORCID on the member profile.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="orcid">
+            <div class="form-group">
+                <label for="orcid_member_id">Member</label>
+                <select id="orcid_member_id" name="member_id" class="form-control" required>
+                    <option value="">Select member</option>
+                    {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}{% if member.orcid %} ({{ member.orcid }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Sync ORCID</button>
+        </form>
+    </div>
+
+    <div class="info-card">
+        <h2>Sync Member from OpenAlex</h2>
+        <p>Requires an OpenAlex author ID on the member profile.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="openalex">
+            <div class="form-group">
+                <label for="openalex_member_id">Member</label>
+                <select id="openalex_member_id" name="member_id" class="form-control" required>
+                    <option value="">Select member</option>
+                    {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}{% if member.openalex_author_id %} ({{ member.openalex_author_id }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Sync OpenAlex</button>
+        </form>
+    </div>
+
+    <div class="info-card">
+        <h2>Import from Crossref</h2>
+        <p>Fetch metadata for a single DOI.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="crossref">
+            <div class="form-group">
+                <label for="doi">DOI</label>
+                <input type="text" id="doi" name="doi" class="form-control" placeholder="10.1038/nature12373" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Import DOI</button>
+        </form>
+    </div>
+
+    <div class="info-card">
+        <h2>Import from arXiv</h2>
+        <p>Search by author name, title keywords, or arXiv ID.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="arxiv">
+            <div class="form-group">
+                <label for="arxiv_member_id">Link to member (optional)</label>
+                <select id="arxiv_member_id" name="member_id" class="form-control">
+                    <option value="">No member link</option>
+                    {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="query">Search query</label>
+                <input type="text" id="query" name="query" class="form-control" placeholder="au:del_maestro AND ti:quantum" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Search arXiv</button>
+        </form>
+    </div>
+</div>
+
+<section style="margin-top: 2rem;">
+    <div class="page-header">
+        <h2>Recent Sync Logs</h2>
+        <a href="{{ url_for('admin_home') }}" class="btn btn-secondary">Back to Admin</a>
+    </div>
+
+    {% if logs %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Started</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                    <tr>
+                        <td>{{ log.started_at.strftime('%Y-%m-%d %H:%M') if log.started_at else '—' }}</td>
+                        <td>{{ log.source or '—' }}</td>
+                        <td>{{ log.status or '—' }}</td>
+                        <td>{{ log.message or '—' }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty-state">No sync activity yet.</div>
+    {% endif %}
+</section>
+{% endblock %}

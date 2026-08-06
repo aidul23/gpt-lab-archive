@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% from "partials/member_avatar.html" import member_avatar %}
+
+{% block title %}{{ member.name }}{% endblock %}
+
+{% block content %}
+<section class="member-profile-header">
+    <div class="member-profile-photo">
+        {{ member_avatar(member, 'large') }}
+    </div>
+    <div class="member-profile-intro">
+        <div class="badge-row">
+            {% if member.active %}
+                <span class="badge badge-active">Active</span>
+            {% else %}
+                <span class="badge badge-inactive">Inactive</span>
+            {% endif %}
+        </div>
+        <h1>{{ member.name }}</h1>
+        {% if member.role %}<p class="member-role">{{ member.role }}</p>{% endif %}
+        {% if member.bio %}
+            <p class="member-bio">{{ member.bio }}</p>
+        {% endif %}
+        <div class="member-profile-links link-row">
+            {% if member.email %}
+                <a href="mailto:{{ member.email }}">Email</a>
+            {% endif %}
+            {% if member.orcid %}
+                <a href="https://orcid.org/{{ member.orcid }}" target="_blank" rel="noopener">ORCID</a>
+            {% endif %}
+            {% if member.profile_url %}
+                <a href="{{ member.profile_url }}" target="_blank" rel="noopener">External profile</a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="stats-grid member-profile-stats">
+    <div class="stat-card">
+        <div class="stat-value">{{ profile.publication_count }}</div>
+        <div class="stat-label">Total works</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ profile.published_count }}</div>
+        <div class="stat-label">Published papers</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ profile.preprint_count }}</div>
+        <div class="stat-label">Preprints</div>
+    </div>
+    {% if profile.first_year and profile.latest_year %}
+        <div class="stat-card">
+            <div class="stat-value">{{ profile.first_year }}–{{ profile.latest_year }}</div>
+            <div class="stat-label">Active years</div>
+        </div>
+    {% endif %}
+</section>
+
+<div class="info-card member-profile-details">
+    <div class="detail-grid">
+        {% if member.email %}
+            <div class="detail-label">Email</div>
+            <div><a href="mailto:{{ member.email }}">{{ member.email }}</a></div>
+        {% endif %}
+
+        {% if member.orcid %}
+            <div class="detail-label">ORCID</div>
+            <div>
+                <a href="https://orcid.org/{{ member.orcid }}" target="_blank" rel="noopener">
+                    {{ member.orcid }}
+                </a>
+            </div>
+        {% endif %}
+
+        {% if member.openalex_author_id %}
+            <div class="detail-label">OpenAlex ID</div>
+            <div>{{ member.openalex_author_id }}</div>
+        {% endif %}
+
+        {% if member.profile_url %}
+            <div class="detail-label">Profile URL</div>
+            <div><a href="{{ member.profile_url }}" target="_blank" rel="noopener">{{ member.profile_url }}</a></div>
+        {% endif %}
+    </div>
+
+    {% if profile.themes %}
+        <h3>Research Themes</h3>
+        <div class="badge-row">
+            {% for theme in profile.themes %}
+                <a href="{{ url_for('theme_detail', slug=theme.slug) }}" class="badge badge-theme">{{ theme.name }}</a>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<section>
+    <div class="page-header member-publications-header">
+        <h2>Published Papers</h2>
+        <div class="action-row">
+            <a href="{{ url_for('publications', member=member.id, preprint_status='published') }}" class="btn btn-secondary btn-small">View published only</a>
+            <a href="{{ url_for('export_member_publications_csv', member_id=member.id) }}" class="btn btn-secondary btn-small">Export CSV</a>
+            <a href="{{ url_for('export_member_publications_bib', member_id=member.id) }}" class="btn btn-secondary btn-small">Export BibTeX</a>
+        </div>
+    </div>
+    {% if grouped_published %}
+        {% for year, pubs in grouped_published.items() %}
+            <h3 class="year-heading">{{ year }}</h3>
+            <div class="card-grid">
+                {% for publication in pubs %}
+                    {% include "partials/publication_card.html" %}
+                {% endfor %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">No published papers linked to this member yet.</div>
+    {% endif %}
+</section>
+
+<section style="margin-top: 2rem;">
+    <div class="page-header member-publications-header">
+        <h2>Preprints</h2>
+        <div class="action-row">
+            <a href="{{ url_for('publications', member=member.id, preprint_status='preprint') }}" class="btn btn-secondary btn-small">View preprints only</a>
+        </div>
+    </div>
+    {% if grouped_preprints %}
+        {% for year, pubs in grouped_preprints.items() %}
+            <h3 class="year-heading">{{ year }}</h3>
+            <div class="card-grid">
+                {% for publication in pubs %}
+                    {% include "partials/publication_card.html" %}
+                {% endfor %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">No preprints linked to this member yet. Add ORCID/OpenAlex IDs and save the profile to sync automatically.</div>
+    {% endif %}
+</section>
+{% endblock %}

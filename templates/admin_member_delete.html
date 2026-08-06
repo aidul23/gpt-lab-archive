@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Delete Member | Admin{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1>Delete Member</h1>
+    <p>This action cannot be undone.</p>
+</section>
+
+<div class="info-card">
+    <p>
+        You are about to delete <strong>{{ member.name }}</strong>
+        and <strong>{{ publication_count }}</strong>
+        linked publication{{ 's' if publication_count != 1 else '' }}.
+    </p>
+
+    {% if publications %}
+        <p>These publications will also be removed, including any co-authored works:</p>
+        <ul>
+            {% for publication in publications %}
+                <li>
+                    {% if publication.year %}{{ publication.year }} — {% endif %}
+                    {{ publication.title }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>This member has no linked publications. Only the member profile will be deleted.</p>
+    {% endif %}
+
+    <form method="post" class="action-row">
+        <button type="submit" class="btn btn-danger">Delete Member and Publications</button>
+        <a href="{{ url_for('admin_members') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
