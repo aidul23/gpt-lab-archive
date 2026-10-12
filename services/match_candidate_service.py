@@ -81,7 +81,11 @@ def upsert_review_candidates(member_id, records):
 
 
 def approve_candidate(candidate):
-    """Allowlist + import publication; mark candidate approved."""
+    """Allowlist + import publication; mark candidate approved.
+
+    Also links other lab members listed as coauthors on the same paper so
+    admin does not need to re-approve the work once per author.
+    """
     payload = _payload(candidate)
     allow_record_for_member(
         candidate.member_id,
@@ -98,7 +102,31 @@ def approve_candidate(candidate):
     candidate.status = STATUS_APPROVED
     candidate.reviewed_at = utcnow()
     candidate.created_publication_id = result.get("publication_id")
+
+    coauthors_linked = []
+    publication_id = result.get("publication_id")
+    if publication_id:
+        publication = publication_service.get_publication_by_id_admin(publication_id)
+        if publication:
+            coauthors_linked = publication_service.link_matching_lab_coauthors(
+                publication,
+                payload,
+                exclude_member_ids=[candidate.member_id],
+            )
+            # Same paper may still sit pending for the approving member under
+            # another candidate row (e.g. DOI vs arXiv) — clear those too.
+            resolve_pending_for_record(
+                candidate.member_id,
+                payload,
+                publication_id=publication_id,
+                status=STATUS_APPROVED,
+                note=f"Resolved with match candidate #{candidate.id}",
+                skip_candidate_id=candidate.id,
+            )
+
     db.session.commit()
+    result = dict(result)
+    result["coauthors_linked"] = coauthors_linked
     return candidate, result
 
 
@@ -114,6 +142,33 @@ def reject_candidate(candidate):
     candidate.reviewed_at = utcnow()
     db.session.commit()
     return candidate
+
+
+def resolve_pending_for_record(
+    member_id,
+    record,
+    *,
+    publication_id=None,
+    status=STATUS_APPROVED,
+    note=None,
+    skip_candidate_id=None,
+):
+    """Mark pending Match Review rows for this member+paper as resolved."""
+    pending = _find_all_pending(member_id, record)
+    updated = 0
+    for item in pending:
+        if skip_candidate_id and item.id == skip_candidate_id:
+            continue
+        item.status = status
+        item.reviewed_at = utcnow()
+        if publication_id and not item.created_publication_id:
+            item.created_publication_id = publication_id
+        if note and not item.match_reason:
+            item.match_reason = note
+        updated += 1
+    if updated:
+        db.session.commit()
+    return updated
 
 
 def authors_list(candidate):
@@ -151,26 +206,42 @@ def _payload(candidate):
 
 
 def _find_pending(member_id, record):
+    found = _find_all_pending(member_id, record)
+    return found[0] if found else None
+
+
+def _find_all_pending(member_id, record):
+    """Return all pending candidates for member that match DOI / arXiv / title+year."""
     query = PublicationMatchCandidate.query.filter_by(
         member_id=member_id, status=STATUS_PENDING
     )
     doi = (record.get("doi") or "").strip().lower()
     arxiv_id = (record.get("arxiv_id") or "").strip().lower()
-    if doi:
-        found = query.filter(db.func.lower(PublicationMatchCandidate.doi) == doi).first()
-        if found:
-            return found
-    if arxiv_id:
-        found = query.filter(
-            db.func.lower(PublicationMatchCandidate.arxiv_id) == arxiv_id
-        ).first()
-        if found:
-            return found
     title = (record.get("title") or "").strip().lower()
     year = record.get("year")
+
+    matches = []
+    seen_ids = set()
+
+    def _add(rows):
+        for item in rows:
+            if item.id in seen_ids:
+                continue
+            seen_ids.add(item.id)
+            matches.append(item)
+
+    if doi:
+        _add(query.filter(db.func.lower(PublicationMatchCandidate.doi) == doi).all())
+    if arxiv_id:
+        _add(
+            query.filter(
+                db.func.lower(PublicationMatchCandidate.arxiv_id) == arxiv_id
+            ).all()
+        )
     if title:
-        candidates = query.all()
-        for item in candidates:
-            if (item.title or "").strip().lower() == title and item.year == year:
-                return item
-    return None
+        for item in query.all():
+            if (item.title or "").strip().lower() == title and (
+                year is None or item.year == year
+            ):
+                _add([item])
+    return matches

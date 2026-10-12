@@ -32,7 +32,7 @@ def seed():
         members = [
             Member(
                 name="Dr. Elena Vasquez",
-                role="Principal Investigator",
+                role="Professor",
                 email="e.vasquez@example.edu",
                 orcid="0000-0001-2345-6789",
                 openalex_author_id="A1234567890",
@@ -64,7 +64,7 @@ def seed():
             ),
             Member(
                 name="Priya Sharma",
-                role="PhD Student",
+                role="Doctoral Researcher / PhD",
                 email="p.sharma@example.edu",
                 orcid="0000-0003-4567-8901",
                 openalex_author_id="A3456789012",
@@ -95,6 +95,9 @@ def seed():
         db.session.flush()
 
         elena, james, priya, marcus = members
+        james.reports_to_id = elena.id
+        priya.reports_to_id = james.id
+        marcus.reports_to_id = james.id
 
         themes = [
             Tag(name="Machine Learning", slug="machine-learning", kind="theme",

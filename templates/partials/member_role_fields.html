@@ -1,0 +1,36 @@
+{# Shared role + reports-to selectors for register / admin forms.
+   Expects: role_choices, supervisor_choices, selected_role, selected_reports_to_id
+#}
+<div class="form-group">
+    <label for="role">Role</label>
+    <select id="role" name="role" class="form-control">
+        <option value="">Select a role</option>
+        {% if selected_role and selected_role not in role_choices %}
+            <option value="{{ selected_role }}" selected>{{ selected_role }} (current)</option>
+        {% endif %}
+        {% for role in role_choices %}
+            <option value="{{ role }}"
+                {% if selected_role == role %}selected{% endif %}>
+                {{ role }}
+            </option>
+        {% endfor %}
+    </select>
+</div>
+
+<div class="form-group">
+    <label for="reports_to_id">Reports to</label>
+    <select id="reports_to_id" name="reports_to_id" class="form-control">
+        <option value="">No supervisor selected</option>
+        {% for supervisor in supervisor_choices %}
+            <option value="{{ supervisor.id }}"
+                {% if selected_reports_to_id == supervisor.id %}selected{% endif %}>
+                {{ supervisor.name }}{% if supervisor.role %} — {{ supervisor.role }}{% endif %}
+            </option>
+        {% endfor %}
+    </select>
+    <p class="form-help">
+        Postdoctoral researchers usually report to the Professor (e.g. Pekka Abrahamsson).
+        Research Assistants, Project Researchers, Doctoral Researchers, Interns, and Summer Trainees
+        usually report to a Postdoc. University Lecturers / Teachers usually report to a Professor.
+    </p>
+</div>

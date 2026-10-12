@@ -26,6 +26,7 @@ class Member(db.Model):
     photo_url = db.Column(db.String(512))
     photo_filename = db.Column(db.String(255))
     bio = db.Column(db.Text)
+    reports_to_id = db.Column(db.Integer, db.ForeignKey("members.id"), nullable=True)
     approval_status = db.Column(db.String(32), default="approved", nullable=False)
     is_self_registered = db.Column(db.Boolean, default=False, nullable=False)
     submitted_at = db.Column(db.DateTime)
@@ -38,6 +39,12 @@ class Member(db.Model):
         "PublicationAuthor",
         back_populates="member",
         lazy="dynamic",
+    )
+    reports_to = db.relationship(
+        "Member",
+        remote_side=[id],
+        backref=db.backref("direct_reports", lazy="dynamic"),
+        foreign_keys=[reports_to_id],
     )
 
     def __repr__(self):
@@ -365,6 +372,7 @@ def _ensure_member_bio_column():
         ("is_self_registered", "ALTER TABLE members ADD COLUMN is_self_registered BOOLEAN DEFAULT 0"),
         ("submitted_at", "ALTER TABLE members ADD COLUMN submitted_at DATETIME"),
         ("reviewed_at", "ALTER TABLE members ADD COLUMN reviewed_at DATETIME"),
+        ("reports_to_id", "ALTER TABLE members ADD COLUMN reports_to_id INTEGER REFERENCES members(id)"),
     ]
     for column_name, statement in migrations:
         if column_name not in columns:

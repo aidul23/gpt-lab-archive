@@ -1,6 +1,13 @@
 """Member-related database operations."""
 from database.db import Member, Publication, PublicationAuthor, db, utcnow
 from services import upload_service
+from services.member_hierarchy import (
+    MEMBER_ROLES,
+    build_hierarchy,
+    normalize_role,
+    parse_reports_to_id,
+    would_create_cycle,
+)
 
 
 APPROVAL_APPROVED = "approved"
@@ -64,7 +71,7 @@ def create_member_admin(data, photo_file=None):
     """Create a member directly from the admin panel."""
     member = Member(
         name=data.get("name", "").strip(),
-        role=_optional_text(data.get("role")),
+        role=_resolve_role(data.get("role")),
         email=_optional_text(data.get("email")),
         orcid=_optional_text(data.get("orcid")),
         openalex_author_id=_optional_text(data.get("openalex_author_id")),
@@ -77,6 +84,7 @@ def create_member_admin(data, photo_file=None):
     )
     db.session.add(member)
     db.session.flush()
+    member.reports_to_id = _resolve_reports_to(data.get("reports_to_id"), member.id)
     _save_photo(member, photo_file)
     db.session.commit()
     return member
@@ -86,7 +94,7 @@ def submit_member_registration(data, photo_file=None):
     """Create a pending member profile submitted by a lab member."""
     member = Member(
         name=data.get("name", "").strip(),
-        role=_optional_text(data.get("role")),
+        role=_resolve_role(data.get("role")),
         email=_optional_text(data.get("email")),
         orcid=_optional_text(data.get("orcid")),
         openalex_author_id=_optional_text(data.get("openalex_author_id")),
@@ -99,6 +107,7 @@ def submit_member_registration(data, photo_file=None):
     )
     db.session.add(member)
     db.session.flush()
+    member.reports_to_id = _resolve_reports_to(data.get("reports_to_id"), member.id)
     _save_photo(member, photo_file)
     db.session.commit()
     return member
@@ -107,16 +116,51 @@ def submit_member_registration(data, photo_file=None):
 def update_member(member, data, photo_file=None):
     """Update an existing lab member."""
     member.name = data.get("name", member.name).strip()
-    member.role = _optional_text(data.get("role"))
+    member.role = _resolve_role(data.get("role"))
     member.email = _optional_text(data.get("email"))
     member.orcid = _optional_text(data.get("orcid"))
     member.openalex_author_id = _optional_text(data.get("openalex_author_id"))
     member.profile_url = _optional_text(data.get("profile_url"))
     member.bio = _optional_text(data.get("bio"))
     member.active = _parse_bool(data.get("active"), default=member.active)
+    member.reports_to_id = _resolve_reports_to(data.get("reports_to_id"), member.id)
     _save_photo(member, photo_file)
     db.session.commit()
     return member
+
+
+def get_supervisor_choices(exclude_member_id=None):
+    """Active members that can appear in the Reports to selector."""
+    members = get_all_members(include_inactive=False, public_only=True)
+    if exclude_member_id:
+        members = [item for item in members if item.id != exclude_member_id]
+    return sorted(
+        members,
+        key=lambda item: (
+            role_sort_key(item.role),
+            (item.name or "").casefold(),
+        ),
+    )
+
+
+def get_members_hierarchy(include_inactive=False, public_only=True):
+    """Return hierarchy forest for the public members page."""
+    members = get_all_members(
+        include_inactive=include_inactive,
+        public_only=public_only,
+    )
+    return build_hierarchy(members)
+
+
+def role_choices():
+    """Role options for forms."""
+    return list(MEMBER_ROLES)
+
+
+def role_sort_key(role):
+    from services.member_hierarchy import role_rank
+
+    return role_rank(role)
 
 
 def approve_member(member):
@@ -171,6 +215,12 @@ def delete_member_with_publications(member_id):
     publications = get_linked_publications(member_id)
     publication_count = len(publications)
 
+    # Detach direct reports so FK does not block delete.
+    Member.query.filter_by(reports_to_id=member_id).update(
+        {Member.reports_to_id: None},
+        synchronize_session=False,
+    )
+
     for publication in publications:
         db.session.delete(publication)
 
@@ -213,6 +263,30 @@ def _save_photo(member, photo_file):
     """Save an uploaded photo if provided."""
     if photo_file and photo_file.filename:
         upload_service.save_member_photo(member, photo_file)
+
+
+def _resolve_role(value):
+    """Prefer canonical role labels; keep unknown custom text as fallback."""
+    text = _optional_text(value)
+    if not text:
+        return None
+    return normalize_role(text) or text
+
+
+def _resolve_reports_to(value, member_id=None):
+    """Validate and return reports_to_id, or raise ValueError."""
+    reports_to_id = parse_reports_to_id(value)
+    if not reports_to_id:
+        return None
+
+    supervisor = get_member_by_id(reports_to_id)
+    if not supervisor or not supervisor.active:
+        raise ValueError("Selected supervisor was not found.")
+
+    members_by_id = {item.id: item for item in Member.query.all()}
+    if would_create_cycle(member_id, reports_to_id, members_by_id):
+        raise ValueError("A member cannot report to themselves or create a reporting loop.")
+    return reports_to_id
 
 
 def _optional_text(value):

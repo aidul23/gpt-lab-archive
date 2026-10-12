@@ -54,6 +54,7 @@
             <tr>
                 <th>Name</th>
                 <th>Role</th>
+                <th>Reports to</th>
                 <th>Email</th>
                 <th>Approval</th>
                 <th>Status</th>
@@ -70,6 +71,7 @@
                         {% endif %}
                     </td>
                     <td>{{ member.role or '—' }}</td>
+                    <td>{{ member.reports_to.name if member.reports_to else '—' }}</td>
                     <td>{{ member.email or '—' }}</td>
                     <td>
                         {% if member.approval_status == 'pending' %}

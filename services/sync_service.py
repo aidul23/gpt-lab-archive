@@ -406,9 +406,19 @@ def _import_candidates(candidates, member=None):
             link_member_id=member.id if member else None,
             link_member_name=member.name if member else None,
         )
+        publication_id = result.get("publication_id")
+        if publication_id:
+            publication = publication_service.get_publication_by_id_admin(publication_id)
+            if publication:
+                coauthors = publication_service.link_matching_lab_coauthors(
+                    publication,
+                    candidate,
+                    exclude_member_ids=[member.id] if member else [],
+                )
+                result = dict(result)
+                result["coauthors_linked"] = coauthors
         results.append(result)
     return _summary_from_results(results)
-
 
 def _summary_from_results(results):
     """Summarize import actions."""

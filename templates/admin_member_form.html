@@ -56,11 +56,9 @@
                value="{{ member.name if member else '' }}">
     </div>
 
-    <div class="form-group">
-        <label for="role">Role</label>
-        <input type="text" id="role" name="role" class="form-control"
-               value="{{ member.role if member and member.role else '' }}">
-    </div>
+    {% set selected_role = member.role if member and member.role else '' %}
+    {% set selected_reports_to_id = member.reports_to_id if member else none %}
+    {% include "partials/member_role_fields.html" %}
 
     <div class="form-group">
         <label for="email">Email</label>

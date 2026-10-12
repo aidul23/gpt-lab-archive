@@ -18,6 +18,25 @@
         </div>
         <h1>{{ member.name }}</h1>
         {% if member.role %}<p class="member-role">{{ member.role }}</p>{% endif %}
+        {% if member.reports_to %}
+            <p class="member-reports-to">
+                Reports to
+                <a href="{{ url_for('member_detail', member_id=member.reports_to.id) }}">
+                    {{ member.reports_to.name }}
+                </a>
+                {% if member.reports_to.role %}
+                    <span class="member-meta">({{ member.reports_to.role }})</span>
+                {% endif %}
+            </p>
+        {% endif %}
+        {% if direct_reports %}
+            <p class="member-team">
+                Team:
+                {% for report in direct_reports %}
+                    <a href="{{ url_for('member_detail', member_id=report.id) }}">{{ report.name }}</a>{% if not loop.last %},{% endif %}
+                {% endfor %}
+            </p>
+        {% endif %}
         {% if member.bio %}
             <p class="member-bio">{{ member.bio }}</p>
         {% endif %}

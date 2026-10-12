@@ -620,6 +620,54 @@ main.container {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.member-hierarchy {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.hierarchy-branch {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.hierarchy-children {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-left: 1.25rem;
+    padding-left: 1.25rem;
+    border-left: 2px solid rgba(78, 0, 142, 0.18);
+}
+
+.hierarchy-card.depth-0 {
+    border-color: rgba(78, 0, 142, 0.28);
+    background: linear-gradient(180deg, #faf7fd 0%, var(--card-bg) 55%);
+}
+
+.hierarchy-card.depth-1 {
+    border-color: rgba(78, 0, 142, 0.16);
+}
+
+.member-reports-to,
+.member-team {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin: 0 0 0.65rem;
+}
+
+.member-reports-to a,
+.member-team a {
+    color: var(--primary-dark);
+    font-weight: 600;
+}
+
+.member-reports-to a:hover,
+.member-team a:hover {
+    color: var(--primary);
+}
+
 .member-card-rich {
     display: flex;
     flex-direction: column;
@@ -1154,6 +1202,11 @@ textarea {
 }
 
 @media (max-width: 640px) {
+    .hierarchy-children {
+        margin-left: 0.65rem;
+        padding-left: 0.85rem;
+    }
+
     .site-header-inner {
         flex-direction: column;
         align-items: flex-start;

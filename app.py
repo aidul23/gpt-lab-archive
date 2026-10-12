@@ -115,11 +115,15 @@ def register_routes(app):
     def members():
         return render_template(
             "members.html",
-            members=member_service.get_all_members(),
+            hierarchy=member_service.get_members_hierarchy(),
         )
 
     @app.route("/join", methods=["GET", "POST"])
     def member_register():
+        form_context = {
+            "role_choices": member_service.role_choices(),
+            "supervisor_choices": member_service.get_supervisor_choices(),
+        }
         if request.method == "POST":
             name = request.form.get("name", "").strip()
             if not name:
@@ -137,7 +141,7 @@ def register_routes(app):
                         "member_register_success.html",
                         member=member,
                     )
-        return render_template("member_register.html")
+        return render_template("member_register.html", **form_context)
 
     @app.route("/members/<int:member_id>")
     def member_detail(member_id):
@@ -147,12 +151,19 @@ def register_routes(app):
         publications = publication_service.get_publications_for_member(member_id)
         grouped = publication_service.split_publications_by_status(publications)
         profile = member_service.get_member_profile_summary(member_id)
+        direct_reports = sorted(
+            member.direct_reports.filter_by(
+                active=True, approval_status="approved"
+            ).all(),
+            key=lambda item: (item.name or "").casefold(),
+        )
         return render_template(
             "member_detail.html",
             member=member,
             grouped_published=grouped["published"],
             grouped_preprints=grouped["preprints"],
             profile=profile,
+            direct_reports=direct_reports,
         )
 
     @app.route("/request-paper", methods=["GET", "POST"])
@@ -326,6 +337,15 @@ def register_routes(app):
             pending_members=member_service.get_pending_members(),
         )
 
+    def _member_form_context(member=None):
+        return {
+            "member": member,
+            "role_choices": member_service.role_choices(),
+            "supervisor_choices": member_service.get_supervisor_choices(
+                exclude_member_id=member.id if member else None
+            ),
+        }
+
     @app.route("/admin/members/new", methods=["GET", "POST"])
     @auth_service.admin_required
     def admin_member_new():
@@ -341,14 +361,16 @@ def register_routes(app):
                     )
                 except ValueError as exc:
                     flash(str(exc), "danger")
-                    return render_template("admin_member_form.html", member=None)
+                    return render_template(
+                        "admin_member_form.html", **_member_form_context(None)
+                    )
                 sync_result = sync_service.sync_member_publications(member.id)
                 flash(
                     f"Member created. {sync_service.format_member_sync_message(member.name, sync_result, sync_result.get('sources'))}",
                     "success" if sync_result.get("status") != "error" else "danger",
                 )
                 return redirect(url_for("admin_member_edit", member_id=member.id))
-        return render_template("admin_member_form.html", member=None)
+        return render_template("admin_member_form.html", **_member_form_context(None))
 
     @app.route("/admin/members/<int:member_id>/edit", methods=["GET", "POST"])
     @auth_service.admin_required
@@ -370,7 +392,9 @@ def register_routes(app):
                     )
                 except ValueError as exc:
                     flash(str(exc), "danger")
-                    return render_template("admin_member_form.html", member=member)
+                    return render_template(
+                        "admin_member_form.html", **_member_form_context(member)
+                    )
                 sync_result = sync_service.sync_member_publications(member.id)
                 flash(
                     f"Member updated. {sync_service.format_member_sync_message(member.name, sync_result, sync_result.get('sources'))}",
@@ -378,7 +402,9 @@ def register_routes(app):
                 )
                 return redirect(url_for("admin_member_edit", member_id=member.id))
 
-        return render_template("admin_member_form.html", member=member)
+        return render_template(
+            "admin_member_form.html", **_member_form_context(member)
+        )
 
     @app.route("/admin/members/<int:member_id>/sync", methods=["POST"])
     @auth_service.admin_required
@@ -544,10 +570,14 @@ def register_routes(app):
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("admin_match_review"))
-        flash(
-            f"Approved and imported '{candidate.title}' ({result.get('action')}).",
-            "success",
+        message = (
+            f"Approved and imported '{candidate.title}' ({result.get('action')})."
         )
+        coauthors = result.get("coauthors_linked") or []
+        if coauthors:
+            names = ", ".join(item["name"] for item in coauthors)
+            message += f" Also linked lab coauthor(s): {names}."
+        flash(message, "success")
         if result.get("publication_id"):
             return redirect(
                 url_for("admin_publication_edit", publication_id=result["publication_id"])

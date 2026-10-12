@@ -224,6 +224,87 @@ def linked_member_names(publication):
     return names
 
 
+def link_matching_lab_coauthors(publication, record=None, *, exclude_member_ids=None):
+    """
+    Link other archive members who appear on this paper's author list.
+
+    Used after Match Review approve (and sync import) so a shared paper does not
+    need a separate admin approval per coauthor. Skips members who blocklisted
+    the work. Returns newly linked members as dicts: {id, name}.
+    """
+    from services.author_matching import names_refer_to_same_person
+    from services.member_service import get_all_members
+    from services.pipeline.overrides import allow_record_for_member, is_blocked
+
+    if not publication:
+        return []
+
+    exclude = {int(item) for item in (exclude_member_ids or []) if item}
+    record = dict(record or {})
+    if not record.get("doi") and publication.doi:
+        record["doi"] = publication.doi
+    if not record.get("arxiv_id") and getattr(publication, "arxiv_id", None):
+        record["arxiv_id"] = publication.arxiv_id
+    if not record.get("title"):
+        record["title"] = publication.title
+
+    author_rows = list(publication.authors or [])
+    if not author_rows:
+        return []
+
+    # Include pending profiles so a paper approved for one author still lands
+    # on a coauthor waiting for profile approval.
+    members = get_all_members(include_inactive=False, public_only=False)
+    newly_linked = []
+
+    for member in members:
+        if member.id in exclude:
+            continue
+
+        already_linked = any(author.member_id == member.id for author in author_rows)
+        match_author = None
+        if not already_linked:
+            for author in author_rows:
+                author_name = (author.author_name or "").strip()
+                if not author_name:
+                    continue
+                # Do not steal an authorship already linked to someone else.
+                if author.member_id and author.member_id != member.id:
+                    continue
+                if names_refer_to_same_person(author_name, member.name):
+                    match_author = author
+                    break
+
+        if not already_linked and not match_author:
+            continue
+        if is_blocked(record, member.id):
+            continue
+
+        if match_author and not already_linked:
+            match_author.member_id = member.id
+            allow_record_for_member(
+                member.id,
+                record,
+                note=f"Auto-linked lab coauthor on publication #{publication.id}",
+            )
+            newly_linked.append({"id": member.id, "name": member.name})
+
+        # Clear stale Match Review rows for this coauthor + paper.
+        from services import match_candidate_service
+
+        match_candidate_service.resolve_pending_for_record(
+            member.id,
+            record,
+            publication_id=publication.id,
+            status=match_candidate_service.STATUS_APPROVED,
+            note="Resolved via coauthor auto-link",
+        )
+
+    if newly_linked:
+        db.session.commit()
+    return newly_linked
+
+
 def unlink_member_from_publication(publication, member_id):
     """
     Remove a lab-member link from a publication without deleting the paper.
