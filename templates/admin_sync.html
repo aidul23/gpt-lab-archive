@@ -87,8 +87,9 @@
     <div class="info-card">
         <h2>arXiv by ID</h2>
         <p>
-            Safe enrichment only. Prefer <code>id:2401.01234</code>.
-            Author-name search is not identity-safe and is disabled in member auto-sync.
+            Prefer <code>id:2401.01234</code> for manual import.
+            Exact-name hits (<code>au:"Full Name"</code>) are fetched during member sync
+            as Tier 3 review candidates only — never auto-published.
         </p>
         <form method="post">
             <input type="hidden" name="action" value="arxiv">

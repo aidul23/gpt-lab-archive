@@ -25,6 +25,7 @@ def score_tier3_candidate(
         "affiliation_match": 0.0,
         "topic_similarity": 0.0,
         "timeline_plausibility": 0.0,
+        "name_exact_prior": 0.0,
     }
 
     breakdown["coauthor_overlap"] = _coauthor_overlap_score(
@@ -38,6 +39,11 @@ def score_tier3_candidate(
         career_year_min=career_year_min,
         career_year_max=career_year_max,
     )
+    # arXiv Atom has no affiliations; exact au:"Name" hits that already passed
+    # author-list filtering get a modest prior so lab-coauthor papers can reach review.
+    reason = candidate.get("match_reason") or ""
+    if reason.startswith("arxiv_name_exact"):
+        breakdown["name_exact_prior"] = 0.25
 
     # Weighted combination — co-author overlap is the strongest signal.
     score = (
@@ -45,8 +51,9 @@ def score_tier3_candidate(
         + 0.25 * breakdown["affiliation_match"]
         + 0.20 * breakdown["topic_similarity"]
         + 0.10 * breakdown["timeline_plausibility"]
+        + breakdown["name_exact_prior"]
     )
-    return round(score, 4), breakdown
+    return round(min(1.0, score), 4), breakdown
 
 
 def passes_tier3_threshold(score, threshold=None):

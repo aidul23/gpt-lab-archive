@@ -101,9 +101,10 @@ def sync_from_arxiv(query, member_id=None):
 
 def sync_from_arxiv_for_member(member_id, max_results=50):
     """
-    Member arXiv path no longer searches by author name.
+    Legacy member arXiv name path (disabled).
 
-    Preprints arrive via ORCID/OpenAlex ORCID queries; arXiv is ID enrichment only.
+    Exact-name arXiv search runs inside the ORCID-anchored pipeline as Tier 3
+    review candidates only — never via this auto-import helper.
     """
     member = member_service.get_member_by_id(member_id)
     if not member:
@@ -123,7 +124,8 @@ def sync_member_publications(member_id):
     ORCID-anchored sync for one member.
 
     Tier 1 (ORCID) + Tier 2 (OpenAlex-by-ORCID) auto-import.
-    Tier 3 name-only candidates are scored into the review queue only.
+    Tier 3 includes exact-name arXiv search (au:"Full Name") scored into the
+    review queue only — never auto-published.
     Blocklist always wins. Then Crossref enrichment runs for DOI metadata.
     """
     member = member_service.get_member_by_id(member_id)

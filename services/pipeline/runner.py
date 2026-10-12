@@ -3,8 +3,8 @@ import json
 
 import config
 from services.orcid_client import normalize_orcid
-from services.pipeline import arxiv_enrich, orcid_fetch, openalex_fetch
-from services.pipeline.dedupe import dedupe_records
+from services.pipeline import arxiv_enrich, arxiv_name_candidates, orcid_fetch, openalex_fetch
+from services.pipeline.dedupe import dedupe_records, record_keys
 from services.pipeline.overrides import is_allowed, is_blocked, override_maps
 from services.pipeline.records import author_names, to_import_candidate
 from services.pipeline.scoring import passes_tier3_threshold, score_tier3_candidate
@@ -42,6 +42,9 @@ def run_for_member(member, *, lab_member_names=None, include_name_candidates=Non
             "observed_openalex_author_ids": [],
         }
 
+    # Merge DB roster with configured known GPT Lab coauthors for Tier 3 scoring.
+    lab_member_names = _merge_lab_names(lab_member_names)
+
     mapping = override_maps(member.id)
 
     tier1 = orcid_fetch.fetch_tier1_works(orcid)
@@ -60,7 +63,6 @@ def run_for_member(member, *, lab_member_names=None, include_name_candidates=Non
     needs_review = []
 
     for record in combined:
-        title = record.get("title")
         if is_blocked(record, member.id, mapping):
             decisions.append(
                 _decision("reject", "manual_blocklist", record, tier=record.get("confidence_tier"))
@@ -86,66 +88,79 @@ def run_for_member(member, *, lab_member_names=None, include_name_candidates=Non
             continue
 
         # Unexpected non-tiered record: treat as Tier 3.
-        score, breakdown = score_tier3_candidate(
+        _route_tier3(
             record,
-            trusted_records=accepted,
-            member_name=member.name,
+            member=member,
             lab_member_names=lab_member_names,
-        )
-        record = dict(record)
-        record["confidence_tier"] = 3
-        record["score"] = score
-        record["score_breakdown"] = breakdown
-        record["match_reason"] = f"tier3_score:{score:.2f}"
-        if passes_tier3_threshold(score):
-            needs_review.append(record)
-            decisions.append(
-                _decision("review", record["match_reason"], record, tier=3, score=score)
-            )
-        else:
-            decisions.append(
-                _decision("reject", f"below_threshold:{score:.2f}", record, tier=3, score=score)
-            )
-
-    # Optional name-only candidates (future / tests). Never auto-accepted.
-    for candidate in include_name_candidates or []:
-        if is_blocked(candidate, member.id, mapping):
-            decisions.append(_decision("reject", "manual_blocklist", candidate, tier=3))
-            continue
-        if is_allowed(candidate, member.id, mapping):
-            allowed = dict(candidate)
-            allowed["match_reason"] = "manual_allowlist"
-            allowed["confidence_tier"] = 2
-            accepted.append(allowed)
-            decisions.append(_decision("accept", "manual_allowlist", allowed, tier=2))
-            continue
-
-        score, breakdown = score_tier3_candidate(
-            candidate,
             trusted_records=accepted,
-            member_name=member.name,
-            lab_member_names=lab_member_names,
+            needs_review=needs_review,
+            decisions=decisions,
+            mapping=mapping,
         )
-        reviewed = dict(candidate)
-        reviewed["confidence_tier"] = 3
-        reviewed["score"] = score
-        reviewed["score_breakdown"] = breakdown
-        reviewed["match_reason"] = f"tier3_score:{score:.2f}"
-        if passes_tier3_threshold(score):
-            needs_review.append(reviewed)
-            decisions.append(
-                _decision("review", reviewed["match_reason"], reviewed, tier=3, score=score)
+
+    # Exact-name arXiv search → Tier 3 review only (never auto-import).
+    name_candidates = list(include_name_candidates or [])
+    if config.ARXIV_NAME_CANDIDATES_ENABLED:
+        try:
+            arxiv_hits = arxiv_name_candidates.fetch_arxiv_name_candidates(
+                member.name,
+                exclude_records=accepted + combined,
             )
-        else:
-            decisions.append(
-                _decision(
-                    "reject",
-                    f"below_threshold:{score:.2f}",
-                    reviewed,
-                    tier=3,
-                    score=score,
+            name_candidates.extend(arxiv_hits)
+            for hit in arxiv_hits:
+                decisions.append(
+                    _decision("fetch", "arxiv_name_exact", hit, tier=3)
                 )
+        except Exception as exc:
+            decisions.append(
+                {
+                    "action": "reject",
+                    "reason": f"arxiv_name_fetch_failed:{exc}",
+                    "title": None,
+                    "tier": 3,
+                    "score": None,
+                    "threshold": config.TIER3_SCORE_THRESHOLD,
+                }
             )
+
+    # Dedupe name candidates against each other and against accepted.
+    accepted_keys = set()
+    for record in accepted:
+        accepted_keys.update(record_keys(record))
+    review_keys = set()
+    for item in needs_review:
+        review_keys.update(record_keys(item))
+
+    seen_name_keys = set()
+    for candidate in name_candidates:
+        cand_keys = set(record_keys(candidate))
+        if cand_keys and cand_keys.intersection(accepted_keys):
+            decisions.append(
+                _decision("reject", "already_accepted_tier12", candidate, tier=3)
+            )
+            continue
+        if cand_keys and cand_keys.intersection(review_keys | seen_name_keys):
+            decisions.append(
+                _decision("reject", "duplicate_candidate", candidate, tier=3)
+            )
+            continue
+        seen_name_keys.update(cand_keys)
+
+        before_review = len(needs_review)
+        before_accepted = len(accepted)
+        _route_tier3(
+            candidate,
+            member=member,
+            lab_member_names=lab_member_names,
+            trusted_records=accepted,
+            needs_review=needs_review,
+            decisions=decisions,
+            mapping=mapping,
+        )
+        if len(needs_review) > before_review:
+            review_keys.update(record_keys(needs_review[-1]))
+        if len(accepted) > before_accepted:
+            accepted_keys.update(record_keys(accepted[-1]))
 
     return {
         "accepted": accepted,
@@ -167,6 +182,59 @@ def records_to_json(result):
 def importable_from_accepted(accepted_records):
     """Convert accepted unified records to publication_service candidates."""
     return [to_import_candidate(record) for record in accepted_records]
+
+
+def _route_tier3(
+    candidate,
+    *,
+    member,
+    lab_member_names,
+    trusted_records,
+    needs_review,
+    decisions,
+    mapping,
+):
+    """Score a Tier 3 candidate; queue above threshold, never auto-accept (unless allowlisted)."""
+    if is_blocked(candidate, member.id, mapping):
+        decisions.append(_decision("reject", "manual_blocklist", candidate, tier=3))
+        return
+    if is_allowed(candidate, member.id, mapping):
+        # Allowlist is handled for Tier 1/2 above; if a name hit is allowlisted,
+        # promote it into accepted here.
+        allowed = dict(candidate)
+        allowed["match_reason"] = "manual_allowlist"
+        allowed["confidence_tier"] = 2
+        trusted_records.append(allowed)
+        decisions.append(_decision("accept", "manual_allowlist", allowed, tier=2))
+        return
+
+    score, breakdown = score_tier3_candidate(
+        candidate,
+        trusted_records=trusted_records,
+        member_name=member.name,
+        lab_member_names=lab_member_names,
+    )
+    reviewed = dict(candidate)
+    reviewed["confidence_tier"] = 3
+    reviewed["score"] = score
+    reviewed["score_breakdown"] = breakdown
+    base_reason = reviewed.get("match_reason") or "tier3"
+    reviewed["match_reason"] = f"{base_reason}|tier3_score:{score:.2f}"
+    if passes_tier3_threshold(score):
+        needs_review.append(reviewed)
+        decisions.append(
+            _decision("review", reviewed["match_reason"], reviewed, tier=3, score=score)
+        )
+    else:
+        decisions.append(
+            _decision(
+                "reject",
+                f"below_threshold:{score:.2f}",
+                reviewed,
+                tier=3,
+                score=score,
+            )
+        )
 
 
 def _public_record(record):
@@ -199,3 +267,19 @@ def _decision(action, reason, record, tier=None, score=None):
         "score": score,
         "threshold": config.TIER3_SCORE_THRESHOLD if tier == 3 else None,
     }
+
+
+def _merge_lab_names(lab_member_names):
+    """Union archive members with config-known GPT Lab coauthors (deduped)."""
+    merged = []
+    seen = set()
+    for name in list(lab_member_names or []) + list(config.LAB_KNOWN_COAUTHOR_NAMES or []):
+        text = (name or "").strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(text)
+    return merged

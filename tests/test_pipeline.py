@@ -214,6 +214,9 @@ class RunnerTests(unittest.TestCase):
             "services.pipeline.runner.arxiv_enrich.enrich_records_with_arxiv",
             side_effect=lambda records: records,
         ), mock.patch(
+            "services.pipeline.runner.arxiv_name_candidates.fetch_arxiv_name_candidates",
+            return_value=[],
+        ), mock.patch(
             "services.pipeline.runner.override_maps", return_value={}
         ):
             result = run_for_member(
@@ -254,6 +257,9 @@ class RunnerTests(unittest.TestCase):
             "services.pipeline.runner.arxiv_enrich.enrich_records_with_arxiv",
             side_effect=lambda records: records,
         ), mock.patch(
+            "services.pipeline.runner.arxiv_name_candidates.fetch_arxiv_name_candidates",
+            return_value=[],
+        ), mock.patch(
             "services.pipeline.runner.override_maps",
             return_value={("doi", "10.1/blocked"): ACTION_BLOCK},
         ):
@@ -284,12 +290,191 @@ class RunnerTests(unittest.TestCase):
             "services.pipeline.runner.arxiv_enrich.enrich_records_with_arxiv",
             side_effect=lambda records: records,
         ), mock.patch(
+            "services.pipeline.runner.arxiv_name_candidates.fetch_arxiv_name_candidates",
+            return_value=[],
+        ), mock.patch(
             "services.pipeline.runner.override_maps",
             return_value={("doi", "10.1/allowed"): ACTION_ALLOW},
         ):
             result = run_for_member(member, include_name_candidates=name_only)
         self.assertEqual(len(result["accepted"]), 1)
         self.assertEqual(result["accepted"][0]["match_reason"], "manual_allowlist")
+
+    def test_arxiv_name_hits_go_to_review_never_accepted(self):
+        member = SimpleNamespace(id=1, name="Md Mahade Hasan", orcid="0000-0002-1825-0097")
+        tier1 = [
+            unify_record(
+                {
+                    "title": "Trusted Lab Paper",
+                    "year": 2025,
+                    "doi": "10.1/trusted",
+                    "authors": [
+                        {"author_name": "Md Mahade Hasan"},
+                        {"author_name": "Pekka Abrahamsson"},
+                    ],
+                    "source": "orcid",
+                },
+                tier=1,
+                match_reason="orcid_claimed",
+                orcid=member.orcid,
+                source_name="orcid",
+            )
+        ]
+        arxiv_hit = unify_record(
+            {
+                "title": "New Preprint With Lab Coauthor",
+                "year": 2025,
+                "arxiv_id": "2501.12345",
+                "authors": [
+                    {"author_name": "Md Mahade Hasan"},
+                    {"author_name": "Pekka Abrahamsson"},
+                ],
+                "source": "arxiv",
+                "is_preprint": True,
+            },
+            tier=3,
+            match_reason="arxiv_name_exact",
+            source_name="arxiv",
+        )
+
+        with mock.patch(
+            "services.pipeline.runner.orcid_fetch.fetch_tier1_works", return_value=tier1
+        ), mock.patch(
+            "services.pipeline.runner.openalex_fetch.fetch_tier2_works",
+            return_value=([], []),
+        ), mock.patch(
+            "services.pipeline.runner.arxiv_enrich.enrich_records_with_arxiv",
+            side_effect=lambda records: records,
+        ), mock.patch(
+            "services.pipeline.runner.arxiv_name_candidates.fetch_arxiv_name_candidates",
+            return_value=[arxiv_hit],
+        ), mock.patch(
+            "services.pipeline.runner.config.ARXIV_NAME_CANDIDATES_ENABLED", True
+        ), mock.patch(
+            "services.pipeline.runner.override_maps", return_value={}
+        ):
+            result = run_for_member(
+                member,
+                lab_member_names=["Md Mahade Hasan", "Pekka Abrahamsson"],
+            )
+
+        accepted_titles = {item["title"] for item in result["accepted"]}
+        self.assertIn("Trusted Lab Paper", accepted_titles)
+        self.assertNotIn("New Preprint With Lab Coauthor", accepted_titles)
+        self.assertTrue(
+            any(
+                item.get("title") == "New Preprint With Lab Coauthor"
+                for item in result["needs_review"]
+            )
+        )
+        self.assertTrue(
+            any(
+                item.get("reason") == "arxiv_name_exact"
+                and item.get("action") == "fetch"
+                for item in result["decisions_log"]
+            )
+        )
+
+    def test_arxiv_name_scores_with_known_coauthors_without_db_roster(self):
+        """Cold-start member: empty ORCID, but papers list Pekka → review queue."""
+        member = SimpleNamespace(id=5, name="Md Aidul Islam", orcid="0009-0003-9441-2371")
+        arxiv_hit = unify_record(
+            {
+                "title": "AI Sandbox: Technical Report",
+                "year": 2026,
+                "arxiv_id": "2608.02679",
+                "authors": [
+                    {"author_name": "Muhammad Waseem"},
+                    {"author_name": "Md Aidul Islam"},
+                    {"author_name": "Pekka Abrahamsson"},
+                ],
+                "source": "arxiv",
+                "is_preprint": True,
+            },
+            tier=3,
+            match_reason="arxiv_name_exact",
+            source_name="arxiv",
+        )
+        with mock.patch(
+            "services.pipeline.runner.orcid_fetch.fetch_tier1_works", return_value=[]
+        ), mock.patch(
+            "services.pipeline.runner.openalex_fetch.fetch_tier2_works",
+            return_value=([], []),
+        ), mock.patch(
+            "services.pipeline.runner.arxiv_enrich.enrich_records_with_arxiv",
+            side_effect=lambda records: records,
+        ), mock.patch(
+            "services.pipeline.runner.arxiv_name_candidates.fetch_arxiv_name_candidates",
+            return_value=[arxiv_hit],
+        ), mock.patch(
+            "services.pipeline.runner.config.ARXIV_NAME_CANDIDATES_ENABLED", True
+        ), mock.patch(
+            "services.pipeline.runner.override_maps", return_value={}
+        ):
+            # Empty DB roster — known coauthors come from config merge.
+            result = run_for_member(member, lab_member_names=[])
+
+        self.assertEqual(result["accepted"], [])
+        self.assertEqual(len(result["needs_review"]), 1)
+        self.assertEqual(result["needs_review"][0]["arxiv_id"], "2608.02679")
+        self.assertGreaterEqual(result["needs_review"][0]["score"], 0.7)
+
+    def test_arxiv_name_skips_ids_already_in_tier1(self):
+        from services.pipeline.arxiv_name_candidates import fetch_arxiv_name_candidates
+
+        member_name = "Ada Lovelace"
+        existing = [
+            unify_record(
+                {
+                    "title": "Already Known",
+                    "year": 2024,
+                    "arxiv_id": "2401.00001",
+                    "authors": [{"author_name": "Ada Lovelace"}],
+                    "source": "orcid",
+                },
+                tier=1,
+                match_reason="orcid_claimed",
+                source_name="orcid",
+            )
+        ]
+        raw = [
+            {
+                "title": "Already Known",
+                "year": 2024,
+                "arxiv_id": "2401.00001",
+                "authors": [{"author_name": "Ada Lovelace"}],
+                "source": "arxiv",
+            },
+            {
+                "title": "Brand New",
+                "year": 2025,
+                "arxiv_id": "2501.00002",
+                "authors": [{"author_name": "Ada Lovelace"}],
+                "source": "arxiv",
+            },
+            {
+                "title": "Wrong Person",
+                "year": 2025,
+                "arxiv_id": "2501.00003",
+                "authors": [{"author_name": "A. Different"}],
+                "source": "arxiv",
+            },
+        ]
+        with mock.patch(
+            "services.pipeline.arxiv_name_candidates.arxiv_client.fetch_works",
+            return_value=raw,
+        ) as fetch_mock:
+            hits = fetch_arxiv_name_candidates(
+                member_name, exclude_records=existing
+            )
+
+        fetch_mock.assert_called_once()
+        query = fetch_mock.call_args[0][0]
+        self.assertEqual(query, 'au:"Ada Lovelace"')
+        titles = {item["title"] for item in hits}
+        self.assertEqual(titles, {"Brand New"})
+        self.assertEqual(hits[0]["match_reason"], "arxiv_name_exact")
+        self.assertEqual(hits[0]["confidence_tier"], 3)
 
 
 if __name__ == "__main__":

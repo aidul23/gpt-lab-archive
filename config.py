@@ -74,6 +74,10 @@ AUTO_SYNC_ACTIVE_ONLY = os.environ.get("AUTO_SYNC_ACTIVE_ONLY", "1") == "1"
 TIER3_SCORE_THRESHOLD = float(os.environ.get("TIER3_SCORE_THRESHOLD", "0.7"))
 OPENALEX_PAGE_SIZE = int(os.environ.get("OPENALEX_PAGE_SIZE", "50"))
 OPENALEX_MAX_PAGES = int(os.environ.get("OPENALEX_MAX_PAGES", "20"))
+# Exact-name arXiv API search (au:"Full Name") as Tier 3 review candidates only.
+# Never auto-published. Set ARXIV_NAME_CANDIDATES_ENABLED=0 to disable.
+ARXIV_NAME_CANDIDATES_ENABLED = os.environ.get("ARXIV_NAME_CANDIDATES_ENABLED", "1") == "1"
+ARXIV_NAME_CANDIDATE_MAX_RESULTS = int(os.environ.get("ARXIV_NAME_CANDIDATE_MAX_RESULTS", "50"))
 # Affiliation / ROR signals used by Tier 3 scoring
 LAB_AFFILIATION_KEYWORDS = [
     part.strip()
@@ -88,6 +92,29 @@ LAB_ROR_IDS = [
     for part in os.environ.get(
         "LAB_ROR_IDS",
         "https://ror.org/033003e23",  # Tampere University
+    ).split(",")
+    if part.strip()
+]
+# Known GPT Lab / frequent coauthors used for Tier 3 scoring even before
+# those people have profiles in the archive DB.
+LAB_KNOWN_COAUTHOR_NAMES = [
+    part.strip()
+    for part in os.environ.get(
+        "LAB_KNOWN_COAUTHOR_NAMES",
+        (
+            "Pekka Abrahamsson,"
+            "Muhammad Waseem,"
+            "Kai-Kristian Kemell,"
+            "Kai-kristian Kemell,"
+            "Md Mahade Hasan,"
+            "Zeeshan Rasheed,"
+            "Zheying Zhang,"
+            "Jussi Rasku,"
+            "Mika Saari,"
+            "Vilma Saari,"
+            "Markku Oivo,"
+            "Md Nasir Uddin Shuvo"
+        ),
     ).split(",")
     if part.strip()
 ]
