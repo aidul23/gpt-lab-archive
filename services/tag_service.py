@@ -2,6 +2,7 @@
 import re
 
 from database.db import Publication, PublicationTag, Tag, db
+from services.lab_themes import GPT_LAB_THEMES
 
 
 def get_all_tags(kind=None):
@@ -10,6 +11,62 @@ def get_all_tags(kind=None):
     if kind:
         query = query.filter_by(kind=kind)
     return query.order_by(Tag.name).all()
+
+
+def ensure_gpt_lab_themes(*, replace_demo_themes=True):
+    """
+    Upsert the eight GPT Lab research pillars as themes.
+
+    When replace_demo_themes is True, remove leftover demo theme names that
+    are not part of the official pillar list (e.g. seed Machine Learning).
+    """
+    pillar_slugs = {item["slug"] for item in GPT_LAB_THEMES}
+    pillar_names = {item["name"] for item in GPT_LAB_THEMES}
+    created = 0
+    updated = 0
+
+    for item in GPT_LAB_THEMES:
+        existing = Tag.query.filter(
+            (Tag.slug == item["slug"]) | (Tag.name == item["name"])
+        ).first()
+        if existing:
+            existing.name = item["name"]
+            existing.slug = item["slug"]
+            existing.kind = "theme"
+            existing.description = item["description"]
+            updated += 1
+        else:
+            db.session.add(
+                Tag(
+                    name=item["name"],
+                    slug=item["slug"],
+                    kind="theme",
+                    description=item["description"],
+                )
+            )
+            created += 1
+
+    removed = 0
+    if replace_demo_themes:
+        demo_names = {
+            "Machine Learning",
+            "Computational Chemistry",
+            "Experimental Design",
+        }
+        for theme in Tag.query.filter_by(kind="theme").all():
+            if theme.slug in pillar_slugs or theme.name in pillar_names:
+                continue
+            if theme.name in demo_names or theme.slug in {
+                "machine-learning",
+                "computational-chemistry",
+                "experimental-design",
+            }:
+                PublicationTag.query.filter_by(tag_id=theme.id).delete()
+                db.session.delete(theme)
+                removed += 1
+
+    db.session.commit()
+    return {"created": created, "updated": updated, "removed": removed}
 
 
 def get_tag_by_id(tag_id):

@@ -99,28 +99,41 @@ def seed():
         priya.reports_to_id = james.id
         marcus.reports_to_id = james.id
 
+        from services.lab_themes import GPT_LAB_THEMES
+
         themes = [
-            Tag(name="Machine Learning", slug="machine-learning", kind="theme",
-                description="Methods and applications of machine learning in scientific research."),
-            Tag(name="Computational Chemistry", slug="computational-chemistry", kind="theme",
-                description="Simulation, modeling, and data-driven chemistry research."),
-            Tag(name="Experimental Design", slug="experimental-design", kind="theme",
-                description="Active learning, optimization, and lab automation."),
+            Tag(
+                name=item["name"],
+                slug=item["slug"],
+                kind="theme",
+                description=item["description"],
+            )
+            for item in GPT_LAB_THEMES
         ]
         tags = [
             Tag(name="Benchmark", slug="benchmark", kind="tag",
                 description="Benchmark datasets or evaluation studies."),
-            Tag(name="Collaboration", slug="collaboration", kind="tag",
-                description="Multi-member or external collaborations."),
-            Tag(name="Methods", slug="methods", kind="tag",
-                description="Methodological contributions."),
+            Tag(name="Case Study", slug="case-study", kind="tag",
+                description="Industrial or organisational case studies."),
+            Tag(name="Systematic Review", slug="systematic-review", kind="tag",
+                description="Systematic literature reviews and mapping studies."),
+            Tag(name="Tool", slug="tool", kind="tag",
+                description="Software tools, prototypes, or platforms."),
         ]
         db.session.add_all(themes + tags)
         db.session.flush()
 
-        theme_ml, theme_chem, theme_design = themes
-        tag_benchmark, tag_collab, tag_methods = tags
-
+        (
+            theme_foundations,
+            theme_requirements,
+            theme_ai_native,
+            theme_agentic,
+            theme_deployment,
+            theme_sustainable,
+            theme_governance,
+            theme_society,
+        ) = themes
+        tag_benchmark, tag_case, tag_review, tag_tool = tags
         publications_data = [
             {
                 "publication": Publication(
@@ -147,7 +160,7 @@ def seed():
                     (james, "James Chen", 2),
                     (priya, "Priya Sharma", 3),
                 ],
-                "tags": [theme_ml, tag_methods],
+                "tags": [theme_ai_native, tag_tool],
             },
             {
                 "publication": Publication(
@@ -173,7 +186,7 @@ def seed():
                     (elena, "Dr. Elena Vasquez", 1),
                     (james, "James Chen", 2),
                 ],
-                "tags": [theme_design, theme_ml, tag_methods],
+                "tags": [theme_deployment, theme_foundations, tag_case],
             },
             {
                 "publication": Publication(
@@ -200,7 +213,7 @@ def seed():
                     (marcus, "Marcus Webb", 2),
                     (elena, "Dr. Elena Vasquez", 3),
                 ],
-                "tags": [theme_chem, tag_benchmark, tag_collab],
+                "tags": [theme_foundations, tag_benchmark, tag_case],
             },
             {
                 "publication": Publication(
@@ -226,7 +239,7 @@ def seed():
                     (james, "James Chen", 1),
                     (priya, "Priya Sharma", 2),
                 ],
-                "tags": [theme_ml, tag_methods],
+                "tags": [theme_agentic, tag_tool],
             },
             {
                 "publication": Publication(
@@ -252,7 +265,7 @@ def seed():
                     (elena, "Dr. Elena Vasquez", 1),
                     (marcus, "Marcus Webb", 2),
                 ],
-                "tags": [theme_design, theme_ml],
+                "tags": [theme_ai_native, theme_deployment],
             },
             {
                 "publication": Publication(
@@ -278,7 +291,7 @@ def seed():
                     (priya, "Priya Sharma", 1),
                     (elena, "Dr. Elena Vasquez", 2),
                 ],
-                "tags": [theme_chem, tag_methods],
+                "tags": [theme_sustainable, tag_review],
             },
             {
                 "publication": Publication(
@@ -306,7 +319,7 @@ def seed():
                     (priya, "Priya Sharma", 3),
                     (marcus, "Marcus Webb", 4),
                 ],
-                "tags": [theme_design, tag_collab],
+                "tags": [theme_governance, tag_case],
             },
             {
                 "publication": Publication(
@@ -331,7 +344,7 @@ def seed():
                 "authors": [
                     (james, "James Chen", 1),
                 ],
-                "tags": [theme_ml],
+                "tags": [theme_society, theme_requirements],
             },
         ]
 

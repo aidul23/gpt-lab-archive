@@ -347,6 +347,7 @@ def init_db(app):
         _ensure_member_bio_column()
         _ensure_publication_arxiv_column()
         _normalize_existing_author_positions()
+        _ensure_gpt_lab_themes()
 
 
 def _normalize_existing_author_positions():
@@ -354,6 +355,13 @@ def _normalize_existing_author_positions():
     from services.publication_service import normalize_all_author_positions
 
     normalize_all_author_positions()
+
+
+def _ensure_gpt_lab_themes():
+    """Keep the eight GPT Lab research pillars present as themes."""
+    from services.tag_service import ensure_gpt_lab_themes
+
+    ensure_gpt_lab_themes(replace_demo_themes=True)
 
 
 def _ensure_member_bio_column():
